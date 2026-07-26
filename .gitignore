@@ -1,0 +1,45 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.egg
+dist/
+build/
+*.so
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# Environment variables
+.env
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# ChromaDB (large binary data)
+data/chroma_db/
+
+# Node.js (frontend)
+node_modules/
+frontend/dist/
+frontend/.vite/
+
+# Test artifacts
+.pytest_cache/
+htmlcov/
+.coverage
+coverage/
+
+# Logs
+*.log
+.zcode/
