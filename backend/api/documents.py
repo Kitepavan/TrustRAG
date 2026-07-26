@@ -1,4 +1,5 @@
 import os
+import json
 import shutil
 import tempfile
 from pathlib import Path
@@ -13,6 +14,22 @@ router = APIRouter(prefix="/documents", tags=["documents"])
 
 UPLOAD_DIR = Path("data/trusted")
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
+METADATA_FILE = UPLOAD_DIR / "_metadata.json"
+
+
+def get_metadata_store() -> dict:
+    """Load document metadata from JSON file."""
+    if METADATA_FILE.exists():
+        with open(METADATA_FILE, "r") as f:
+            return json.load(f)
+    return {}
+
+
+def save_metadata_store(store: dict):
+    """Save document metadata to JSON file."""
+    with open(METADATA_FILE, "w") as f:
+        json.dump(store, f, indent=2)
 
 
 @router.post("/upload")
@@ -47,6 +64,21 @@ async def upload_document(
         dest = UPLOAD_DIR / file.filename
         os.replace(tmp_path.name, str(dest))
 
+        # Store metadata for richer document listing
+        metadata = get_metadata_store()
+        metadata[result["document_id"]] = {
+            "document_id": result["document_id"],
+            "filename": result["filename"],
+            "sha256": result["sha256"],
+            "uploaded_by": result["uploaded_by"],
+            "uploaded_at": result["uploaded_at"],
+            "total_pages": result["total_pages"],
+            "total_chars": result["total_chars"],
+            "total_chunks": stored,
+            "status": result["status"],
+        }
+        save_metadata_store(metadata)
+
         return {
             "document_id": result["document_id"],
             "filename": result["filename"],
@@ -69,9 +101,31 @@ async def upload_document(
 
 @router.get("/")
 async def list_documents():
-    """List all uploaded documents."""
-    docs = []
+    """List all uploaded documents with metadata."""
+    metadata = get_metadata_store()
+    documents = []
+
+    # Iterate files on disk
     for f in UPLOAD_DIR.iterdir():
-        if f.is_file():
-            docs.append({"filename": f.name, "size_bytes": f.stat().st_size})
-    return {"documents": docs, "count": len(docs)}
+        if f.is_file() and f.name != "_metadata.json":
+            doc_info = {
+                "filename": f.name,
+                "size_bytes": f.stat().st_size,
+            }
+            # Merge stored metadata if available
+            for doc_id, meta in metadata.items():
+                if meta.get("filename") == f.name:
+                    doc_info.update(meta)
+                    break
+            documents.append(doc_info)
+
+    return {"documents": documents, "count": len(documents)}
+
+
+@router.get("/{document_id}")
+async def get_document(document_id: str):
+    """Get metadata for a specific document."""
+    metadata = get_metadata_store()
+    if document_id not in metadata:
+        raise HTTPException(status_code=404, detail=f"Document {document_id} not found")
+    return metadata[document_id]
