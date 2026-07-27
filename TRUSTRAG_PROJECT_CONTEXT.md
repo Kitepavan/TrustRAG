@@ -1210,10 +1210,10 @@ Language	Python
 Backend	FastAPI
 PDF extraction	PyMuPDF
 Embedding	Google EmbeddingGemma-300M
-Vector store	ChromaDB initially / FAISS alternative
-LLM	Not finalized
-Frontend	Later
-Security	Added after baseline RAG
+Vector store	ChromaDB (cosine similarity)
+LLM	Zai API (glm-4.7-flash)
+Frontend	React 18 + TypeScript + Vite + Tailwind CSS
+Security	Added after baseline RAG (Stages 7+)
 
 Proposed directory:
 
@@ -2185,7 +2185,7 @@ claim the planned dataset size is already collected,
 claim the current literature list fully satisfies the publisher requirement without verification.
 63. Current exact position — IMPLEMENTATION STATUS (Updated)
 
-We have completed Stages 1–6 of the implementation roadmap. The basic RAG pipeline is fully functional.
+We have completed Stages 1–6 of the implementation roadmap plus the web frontend. The basic RAG pipeline is fully functional and accessible through a web interface.
 
 COMPLETED STAGES:
 
@@ -2224,15 +2224,40 @@ Stage 6 — Basic RAG ✓
 - Full pipeline: upload → chunk → embed → store → query → search → LLM → answer
 - API base URL: https://api.z.ai/api/paas/v4/
 
+WEB FRONTEND ✓
+- React 18 + TypeScript + Vite + Tailwind CSS
+- 5 pages: Dashboard, Documents, RAG Chat, Knowledge Base, System Status
+- Enterprise security dashboard aesthetic (dark sidebar, clean cards)
+- Drag-and-drop file upload with progress feedback
+- ChatGPT-style RAG interface with source citations
+- Real-time system status diagnostics
+- All data fetched from backend (no hardcoded values)
+- Frontend calls backend directly via CORS (no proxy needed)
+- Git tag: baseline-rag-v1
+
+NEW BACKEND ENDPOINTS (added for frontend):
+- GET /dashboard/stats — Real-time dashboard statistics (doc count, chunk count, model info)
+- GET /status — Component health diagnostics (backend, embedding, vector DB, LLM, RAG pipeline)
+- GET /documents/{document_id} — Single document metadata
+
+ENHANCED ENDPOINTS:
+- GET /documents/ — Now returns richer metadata (doc ID, pages, chunks, SHA-256, upload date)
+
 CURRENT API ENDPOINTS:
 - POST /documents/upload — Upload and ingest documents
 - POST /query — Query the RAG pipeline
-- GET /documents/ — List uploaded documents
+- GET /documents/ — List uploaded documents (with metadata)
+- GET /documents/{document_id} — Get single document metadata
+- GET /dashboard/stats — Dashboard statistics
+- GET /status — System component health
 - GET /health — Health check
 
-ACTIVE SERVER:
-- FastAPI running on port 8000
-- Server started with: setsid python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000
+ACTIVE SERVERS:
+- Backend: FastAPI running on port 8000
+- Frontend: Vite dev server running on port 5173
+- Start both with: ./start.sh
+- Manual backend: source .venv/bin/activate && uvicorn backend.main:app --host 0.0.0.0 --port 8000
+- Manual frontend: cd frontend && npm run dev
 
 REMAINING STAGES (7–12):
 - Stage 7: Document security (signatures, integrity, provenance)
@@ -2246,11 +2271,12 @@ REMAINING STAGES (7–12):
 
 backend/
 ├── __init__.py
-├── main.py                    # FastAPI app, includes all routers
+├── main.py                    # FastAPI app, CORS, includes all routers
 ├── api/
 │   ├── __init__.py
-│   ├── documents.py           # Upload + list endpoints
-│   └── query.py               # RAG query endpoint
+│   ├── documents.py           # Upload + list + metadata endpoints
+│   ├── query.py               # RAG query endpoint
+│   └── dashboard.py           # Dashboard stats + system status endpoints
 ├── rag/
 │   ├── __init__.py
 │   ├── ingestion.py           # File validation, SHA-256, PyMuPDF extraction
@@ -2262,6 +2288,42 @@ backend/
 ├── database/                  # (empty — future)
 └── models/                    # (empty — future)
 
+frontend/
+├── index.html
+├── package.json               # React 18, TypeScript, Vite, Tailwind CSS
+├── vite.config.ts
+├── src/
+│   ├── main.tsx               # App entry point
+│   ├── App.tsx                # Router setup
+│   ├── index.css              # Tailwind base styles
+│   ├── types/index.ts         # TypeScript interfaces for API responses
+│   ├── services/api.ts        # API client (fetch wrapper, CORS to backend)
+│   ├── hooks/useApi.ts        # Custom hook for API calls with loading/error
+│   ├── components/
+│   │   ├── Layout.tsx         # Sidebar + main content area
+│   │   ├── Sidebar.tsx        # Navigation sidebar
+│   │   ├── Card.tsx           # Reusable stat card
+│   │   ├── StatusBadge.tsx    # Online/Offline/Ready indicator
+│   │   └── FileUpload.tsx     # Drag-and-drop file upload
+│   └── pages/
+│       ├── Dashboard.tsx      # Stats cards + pipeline visualization
+│       ├── Documents.tsx      # Upload + document list
+│       ├── Chat.tsx           # ChatGPT-style RAG interface
+│       ├── KnowledgeBase.tsx  # Indexed documents table
+│       └── SystemStatus.tsx   # Component health diagnostics
+
+data/
+├── trusted/                   # Uploaded documents
+│   ├── _metadata.json         # Document metadata store
+│   ├── test_policy.pdf
+│   └── test_long_policy.pdf
+├── chroma_db/                 # ChromaDB vector storage (gitignored)
+├── poisoned/                  # (empty — Stage 8+)
+└── restricted/                # (empty — future)
+
+start.sh                       # Development launcher (starts backend + frontend)
+README.md                      # Full project documentation
+
 65. Decisions finalized
 
 - Embedding model: Google EmbeddingGemma-300M (local, 768 dims)
@@ -2270,6 +2332,10 @@ backend/
 - Chunking: Sentence-aware, 512 chars, 64 overlap
 - Backend framework: FastAPI
 - PDF extraction: PyMuPDF
+- Frontend: React 18 + TypeScript + Vite + Tailwind CSS
+- Frontend design: Enterprise security dashboard (dark sidebar, clean cards, minimal)
+- Frontend-backend communication: Direct CORS (no Vite proxy)
+- Frontend location: frontend/ directory (separate from backend)
 
 66. Decisions still open
 
@@ -2373,4 +2439,4 @@ Do not prematurely add later-stage features.
 Preserve the baseline RAG so we can compare it experimentally against TrustRAG.
 Keep the implementation suitable for an Information Security academic project and eventual live demonstration.
 
-Current checkpoint: Stages 1–6 complete. Basic RAG pipeline is fully functional. Next: Stage 7 — Document security (signatures, integrity, provenance).
+Current checkpoint: Stages 1–6 complete + Web frontend complete. Basic RAG pipeline is fully functional and accessible through a web interface at http://localhost:5173. Git tag: baseline-rag-v1. Next: Stage 7 — Document security (signatures, integrity, provenance).
