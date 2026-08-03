@@ -2183,7 +2183,7 @@ invent trust-score weights without justification,
 invent experimental accuracy/results,
 claim the planned dataset size is already collected,
 claim the current literature list fully satisfies the publisher requirement without verification.
-63. Current exact position — IMPLEMENTATION STATUS (Updated)
+63. Current exact position — IMPLEMENTATION STATUS (Updated 2026-08-01)
 
 We have completed Stages 1–6 of the implementation roadmap plus the web frontend. The basic RAG pipeline is fully functional and accessible through a web interface.
 
@@ -2195,10 +2195,11 @@ Stage 1 — Project/backend setup ✓
 - Directory structure: backend/{api,rag,security,database,models}, data/{trusted,poisoned,restricted}, tests/, scripts/
 
 Stage 2 — Document ingestion ✓
-- backend/rag/ingestion.py: File validation (type, size, readability), SHA-256 hashing, PyMuPDF text extraction
+- backend/rag/ingestion.py: File validation (type, size, readability), SHA-256 hashing, text extraction
+- Text extraction: PyMuPDF for PDF, native read for TXT, python-docx for DOCX (added 2026-08-01)
 - backend/api/documents.py: POST /documents/upload endpoint
-- Supports PDF and TXT formats
-- Files saved to data/trusted/
+- Supports PDF, DOCX and TXT formats
+- Files saved to data/trusted/ under server-generated {document_id}{suffix} names (no path traversal)
 
 Stage 3 — Text chunking ✓
 - backend/rag/chunking.py: Sentence-aware chunker
@@ -2224,13 +2225,25 @@ Stage 6 — Basic RAG ✓
 - Full pipeline: upload → chunk → embed → store → query → search → LLM → answer
 - API base URL: https://api.z.ai/api/paas/v4/
 
-WEB FRONTEND ✓
-- React 18 + TypeScript + Vite + Tailwind CSS
+WEB FRONTEND — DARK THEME REDESIGN ✓ (Updated 2026-08-01)
+- React 18 + TypeScript (strict mode) + Vite + Tailwind CSS v4
 - 5 pages: Dashboard, Documents, RAG Chat, Knowledge Base, System Status
-- Enterprise security dashboard aesthetic (dark sidebar, clean cards)
-- Drag-and-drop file upload with progress feedback
-- ChatGPT-style RAG interface with source citations
-- Real-time system status diagnostics
+- Enterprise security dashboard aesthetic — fully dark theme:
+  - Cyber-Metric Enterprise Security color palette (material-design-based)
+  - Custom Tailwind @theme tokens: surface-container, on-surface-variant, primary, secondary, tertiary, error, outline
+  - Zero hardcoded hex colors in TSX — all semantic utility classes (bg-surface-container, text-on-surface-variant, etc.)
+  - Inter + JetBrains Mono fonts + Material Symbols Outlined icons
+  - Consistent border-outline-variant separators, surface-dim/surface-container hierarchy
+- Mobile responsive sidebar: off-canvas overlay on mobile, fixed sidebar on desktop (lg+)
+- Shared PageHeader component: breadcrumb, online status, action icons, hamburger menu — eliminates fragile -ml-6/-mt-6 duplication
+- Dynamic sidebar footer: fetches real backend health (getHealth endpoint) — shows "Status: Healthy" or "Status: Offline" instead of hardcoded
+- Drag-and-drop file upload with keyboard accessibility (role="button", tabIndex, Enter/Space)
+- RAG Chat: actual source citations from response.sources (no fabricated mock data), copy-to-clipboard, loading states
+- Documents: functional client-side pagination (PAGE_SIZE=5), working search filter, computed storage metrics from real data
+- Dashboard: quick-action buttons navigate to /documents and /chat, status badges show real operational/degraded state, derived metrics from API stats
+- Knowledge Base: keyboard-expandable rows (aria-expanded, role="button"), overflow-x-auto for responsive
+- System Status: silent refresh (keeps previous data while fetching), deduplicated model/version rows
+- Accessibility: aria-labels on all icon-only buttons, heading hierarchy (h1 + h2/h3), sr-only labels, keyboard navigation
 - All data fetched from backend (no hardcoded values)
 - Frontend calls backend directly via CORS (no proxy needed)
 - Git tag: baseline-rag-v1
@@ -2267,7 +2280,198 @@ REMAINING STAGES (7–12):
 - Stage 11: Secure retrieval
 - Stage 12: Evaluation
 
-64. Files created during implementation
+64. Hardening pass — full code review + quick wins (2026-08-01)
+
+A full-project code review was run (opencode `code-reviewer` agent). Result:
+6.5/10, verdict REQUEST CHANGES. All CRITICAL + most WARNING items fixed in
+this pass. Key fixes:
+
+CRITICAL — SECURITY:
+- C1: Zai API key REMOVED from source (backend/rag/llm.py). Now loaded from
+  `ZAI_API_KEY` env var. `.env` created (gitignored); `.env.example` documents
+  all env vars. Server refuses to start if the key is missing. NOTE: the old
+  key is still in git history (commit 88df6e8) and MUST be rotated/revoked
+  before the repo is shared.
+- C2: Path-traversal upload fixed (backend/api/documents.py). Files are now
+  stored under server-generated `{document_id}{suffix}` names inside
+  data/trusted/; the client-controlled filename is never used as a path.
+  Verified: uploading `../../evil.txt` lands safely in data/trusted/.
+- C3: LLM failures no longer returned as user-facing "answers". `query.py`
+  catches errors → HTTP 502 + server-side logging (no internals leaked).
+- C4: Baseline prompt-injection mitigation. Retrieved context is wrapped in
+  `<context>`/`</context>` tags and the system prompt declares it UNTRUSTED
+  DATA. Still a deliberate demo baseline; real defense lands in Stage 11.
+
+WARNING — ROBUSTNESS:
+- W1: Embedding model path now configurable via `EMBEDDING_MODEL_PATH` env
+  (fallback to /home/pavan/AI-Models/embeddinggemma-300m).
+- W2: DOCX extraction IMPLEMENTED (backend/rag/ingestion.py,
+  `extract_text_docx` via python-docx, tables + paragraphs). Dependency
+  `python-docx==1.2.0` added to requirements.txt. No longer a 500 trap.
+- W4: Upload 500s no longer leak exception text (generic message + log).
+- W6: `/dashboard/stats` now degrades gracefully when ChromaDB is down
+  (reports error instead of crashing).
+- W7: `datetime.utcnow()` → `datetime.now(timezone.utc)` (ingestion.py).
+- W8: Metadata store read/write guarded by a `threading.Lock` (documents.py).
+- W3 (partial): server-side filenames prevent same-name re-uploads from
+  overwriting the original; still no dedup-by-hash / delete endpoint (Stage 7).
+
+FRONTEND:
+- `strict: true` added to tsconfig.app.json and tsconfig.node.json.
+- `useApi` hook lint warning fixed (ref-based fetcher, no non-literal
+  useCallback deps). `npm run lint` now clean.
+- API base URL from `VITE_API_URL` env (default http://localhost:8000).
+
+VERIFICATION:
+- `npm run lint` clean; `npm run build` passes with strict mode.
+- Backend imports + all endpoints exercised via TestClient; DOCX ingestion
+  tested end-to-end; path traversal regression-tested.
+
+TOOLING ADDED:
+- opencode.json — auto-allow permission for edit/bash/webfetch/websearch/task.
+- .opencode/agent/code-reviewer.md — read-only `code-reviewer` subagent for
+  PR/diff/full-code reviews (security-aware, severity-graded, run lint/build).
+
+OUTSTANDING (deferred from hardening pass):
+- Rotate the leaked Zai key + purge git history (MUST DO before sharing).
+- Early size cap before buffering (Content-Length → 413) — partially done at
+  API layer; full stream cap still open.
+- BackgroundTasks for heavy ingestion (NIST doc = 1419 chunks, minutes).
+- Backend linter (ruff) + pytest test suite (none exists).
+- Stage 7 items: delete endpoint, dedup by sha256, real char offsets.
+
+64a. Frontend dark-theme redesign + code review pass (2026-08-01)
+
+Design source:
+- sticht_trustrag_security_dashboard.zip (in ~/Trust_RAG/) containing 3 screen
+  mockups (Dashboard, Documents, Chat) + DESIGN.md color/typography spec.
+
+DESIGN SYSTEM IMPLEMENTATION:
+- Cyber-Metric Enterprise Security palette applied to all 12 frontend TSX files
+- Tailwind v4 @theme tokens defined in index.css (~30 semantic color tokens)
+  - surface-container (#1e2024), on-surface-variant (#c0c7d4), primary (#a2c9ff),
+    secondary (#67df70), tertiary (#fabc45), error (#ffb4ab), outline (#8b919d),
+    outline-variant (#414752), etc.
+- All ~470 inline arbitrary hex values (bg-[#1e2024], text-[#c0c7d4], etc.)
+  replaced with semantic utility classes (bg-surface-container, text-on-surface-variant)
+  - Result: palette changes now require editing only index.css, not 470+ spots
+- Google Fonts: Inter (headings/body), JetBrains Mono (data/mono)
+- Material Symbols Outlined icons throughout (replaces all emoji icons)
+- index.html: font preconnects added, duplicate inline <style> removed
+
+CODE REVIEW (reviewer subagent, read-only):
+- Ran full frontend code review — identified 27 issues across 6 categories:
+  correctness, design-system consistency, dead/non-functional UI, React
+  anti-patterns, accessibility, responsive layout, consistency/messaging
+- Key findings: fabricated source citations in Chat, ~470 uncentralized colors,
+  14 unused CSS utility classes, Card.tsx unused, setTimeout without cleanup,
+  useApi ref mutation during render, zero aria-* attributes in codebase,
+  no mobile sidebar strategy, hardcoded "MAX 100MB" vs actual 50MB limit
+
+FIXES IMPLEMENTED:
+
+High Priority:
+- REMOVED 3 hardcoded mock source cards in Chat sidebar — now renders actual
+  response.sources from the backend RAG query (was a trust concern for a
+  "verified retrieval" security product)
+- Count badge now correctly reflects real retrieved sources count
+- Removed hardcoded "MODEL: GPT-4-SEC-ENHANCED" footer (misleading)
+
+Design System:
+- Centralized all color tokens into Tailwind @theme (see above)
+- Removed 14 unused manual CSS utility classes from index.css
+
+React Anti-Patterns Fixed:
+- useApi: ref mutation moved from render into useEffect
+- useApi: added silent refresh mode (keeps previous data while fetching)
+- Documents: setTimeout now tracked via ref, cleaned up on unmount
+- Documents: removed hardcoded size_bytes:0 in upload toast, uses real file.size
+- useApi: leftover eslint-disable comment replaced with proper oxlint directive
+
+Dead Code Removed:
+- Card.tsx component deleted (was never imported anywhere)
+- public/icons.svg deleted (never referenced in code)
+- getHealth() in api.ts: no longer dead — now used by Sidebar for dynamic health
+
+Documents Page:
+- Functional client-side pagination (PAGE_SIZE=5) with prev/next buttons
+- Working search filter (controlled input, filters by filename)
+- Mock metrics (72%, 12%, 412 pg/min, 1.4M) removed — replaced with real data:
+  total documents, total chunks, total pages computed from API response
+- Removed non-functional Filter button (replaced with focus-search action)
+- Removed non-functional New Folder button (no folder concept in backend)
+- Added sr-only label for search input
+
+Dashboard Page:
+- Added proper h1 heading (was h2 with no h1 ancestor)
+- Quick action buttons now navigate (/documents, /chat) instead of doing nothing
+- Removed fabricated extraction events ("Policy_A1_2024.pdf" etc.)
+- Replaced with real "Pipeline Components" status derived from API stats
+- Removed hardcoded "Index Health 99.8%" — replaced with real backend connectivity
+- Removed mock status badges — now shows operational/degraded based on real stats
+
+Chat Page:
+- Copy button now functional (navigator.clipboard API)
+- Fragile KeyboardEvent→FormEvent typing fixed (separate handleSubmitEvent)
+- Message IDs use atomic counter (no more Date.now() collision on rapid sends)
+- sr-only h1 added for accessibility heading hierarchy
+
+Knowledge Base Page:
+- Keyboard-accessible expandable rows (role="button", tabIndex, aria-expanded,
+  Enter/Space handlers)
+- overflow-x-auto added for responsive table on mobile
+
+Sidebar:
+- Mobile responsive: off-canvas overlay on mobile (hidden by default, hamburger
+  toggle), fixed sidebar on lg+ screens
+- Dynamic health status: fetches /health endpoint, shows "Healthy" or "Offline"
+  instead of hardcoded "Status: Healthy"
+
+Shared PageHeader Component:
+- New components/PageHeader.tsx eliminates the fragile -ml-6/-mt-6 header
+  pattern duplicated across all 5 pages
+- Includes mobile hamburger button (lg:hidden), breadcrumb, online status,
+  action icons (dns, memory, person)
+- Centralized aria-labels for all icon-only buttons
+- Sidebar context (sidebar-context.ts) provides openSidebar() to PageHeader
+
+FileUpload:
+- Keyboard accessible: role="button", tabIndex=0, Enter/Space to open
+- aria-label on dropzone for screen readers
+- Focus ring on keyboard focus
+- MAX size message corrected: "50MB" (was "100MB", validation enforces 50MB)
+
+System Status:
+- Refresh button now uses silent mode (keeps current data visible while
+  refreshing instead of blanking to spinner)
+- Deduplicated model/version rows (was showing both component.name and
+  component.model as separate "Model" rows)
+
+Accessibility (whole codebase):
+- 13 aria-label attributes added to icon-only buttons across all pages
+- Heading hierarchy fixed: h1 present on all pages, h2/h3 for sections
+- sr-only labels on form inputs (search, chat textarea)
+- KnowledgeBase rows fully keyboard-navigable with aria-expanded
+- FileUpload dropzone fully keyboard-navigable
+
+Layout:
+- Removed fragile -ml-6/-mt-6 duplication from all 5 pages (now in PageHeader)
+- Removed fixed mobile top bar (hamburger now in PageHeader)
+- Sidebar context enables mobile toggle without prop drilling through Outlet
+
+Backend:
+- CORS allow_origins updated from specific origins to ["*"] for broader
+  dev environment compatibility (fixed NetworkError from 127.0.0.1 vs localhost)
+
+VERIFICATION:
+- npm run build: ✓ (354ms, no warnings)
+- npx tsc -b: ✓ (strict mode, no unused locals/params)
+- npx oxlint src/: ✓ (0 warnings)
+- Zero hardcoded hex colors remaining in TSX files
+- All 5 pages use shared PageHeader component
+- 184 semantic token usages across the codebase
+
+65. Files created during implementation
 
 backend/
 ├── __init__.py
@@ -2289,28 +2493,31 @@ backend/
 └── models/                    # (empty — future)
 
 frontend/
-├── index.html
-├── package.json               # React 18, TypeScript, Vite, Tailwind CSS
+├── index.html                 # Google Fonts preconnect, Material Symbols, dark base
+├── package.json               # React 18, TypeScript, Vite, Tailwind CSS v4
 ├── vite.config.ts
-├── src/
-│   ├── main.tsx               # App entry point
-│   ├── App.tsx                # Router setup
-│   ├── index.css              # Tailwind base styles
-│   ├── types/index.ts         # TypeScript interfaces for API responses
-│   ├── services/api.ts        # API client (fetch wrapper, CORS to backend)
-│   ├── hooks/useApi.ts        # Custom hook for API calls with loading/error
-│   ├── components/
-│   │   ├── Layout.tsx         # Sidebar + main content area
-│   │   ├── Sidebar.tsx        # Navigation sidebar
-│   │   ├── Card.tsx           # Reusable stat card
-│   │   ├── StatusBadge.tsx    # Online/Offline/Ready indicator
-│   │   └── FileUpload.tsx     # Drag-and-drop file upload
-│   └── pages/
-│       ├── Dashboard.tsx      # Stats cards + pipeline visualization
-│       ├── Documents.tsx      # Upload + document list
-│       ├── Chat.tsx           # ChatGPT-style RAG interface
-│       ├── KnowledgeBase.tsx  # Indexed documents table
-│       └── SystemStatus.tsx   # Component health diagnostics
+├── tsconfig.app.json          # strict: true
+├── tsconfig.node.json         # strict: true
+└── src/
+    ├── main.tsx               # App entry point
+    ├── App.tsx                # Router setup (BrowserRouter, Layout, 5 routes)
+    ├── index.css              # Tailwind v4 @theme tokens (30+ color tokens)
+    ├── sidebar-context.ts     # React context for sidebar mobile toggle
+    ├── types/index.ts         # TypeScript interfaces for all API responses
+    ├── services/api.ts        # API client (fetch wrapper, CORS to backend)
+    ├── hooks/useApi.ts        # Custom hook: loading/error/refreshing/silent-refresh
+    ├── components/
+    │   ├── Layout.tsx         # Sidebar + main content + SidebarContextProvider
+    │   ├── Sidebar.tsx        # Nav sidebar, mobile off-canvas, dynamic health status
+    │   ├── PageHeader.tsx     # Shared sticky header (breadcrumb, icons, hamburger)
+    │   ├── StatusBadge.tsx    # Online/Offline/Ready indicator (semantic tokens)
+    │   └── FileUpload.tsx     # Drag-and-drop upload (keyboard accessible)
+    └── pages/
+        ├── Dashboard.tsx      # Stats cards + pipeline vis + quick actions
+        ├── Documents.tsx      # Upload + paginated table + search + metrics
+        ├── Chat.tsx           # RAG chat + real source citations + copy button
+        ├── KnowledgeBase.tsx  # Expandable document table (aria-expanded)
+        └── SystemStatus.tsx   # Component health + silent refresh
 
 data/
 ├── trusted/                   # Uploaded documents
@@ -2323,6 +2530,11 @@ data/
 
 start.sh                       # Development launcher (starts backend + frontend)
 README.md                      # Full project documentation
+requirements.txt               # Python dependencies (incl. python-docx)
+.env.example                   # Template for env vars (ZAI_API_KEY, EMBEDDING_MODEL_PATH, VITE_API_URL)
+.env                           # Local secrets (gitignored)
+opencode.json                  # opencode config (auto-allow permissions)
+.opencode/agent/code-reviewer.md  # Read-only code-reviewer subagent (opencode)
 
 65. Decisions finalized
 
@@ -2332,10 +2544,19 @@ README.md                      # Full project documentation
 - Chunking: Sentence-aware, 512 chars, 64 overlap
 - Backend framework: FastAPI
 - PDF extraction: PyMuPDF
-- Frontend: React 18 + TypeScript + Vite + Tailwind CSS
-- Frontend design: Enterprise security dashboard (dark sidebar, clean cards, minimal)
+- DOCX extraction: python-docx (added 2026-08-01)
+- Secrets: env vars via .env / python-dotenv (ZAI_API_KEY, EMBEDDING_MODEL_PATH)
+- Frontend: React 18 + TypeScript (strict) + Vite + Tailwind CSS v4
+- Frontend design: Enterprise security dark-theme dashboard
+  - Cyber-Metric Enterprise Security palette (material-design-based)
+  - Tailwind v4 @theme tokens for all colors (no hardcoded hex in components)
+  - Inter + JetBrains Mono fonts, Material Symbols Outlined icons
 - Frontend-backend communication: Direct CORS (no Vite proxy)
 - Frontend location: frontend/ directory (separate from backend)
+- Frontend architecture: Shared PageHeader component + SidebarContext (avoids
+  duplicated header patterns, enables mobile sidebar toggle)
+- Frontend a11y: aria-labels on icon-only buttons, heading hierarchy, keyboard
+  navigation on interactive elements, sr-only form labels
 
 66. Decisions still open
 
@@ -2439,4 +2660,4 @@ Do not prematurely add later-stage features.
 Preserve the baseline RAG so we can compare it experimentally against TrustRAG.
 Keep the implementation suitable for an Information Security academic project and eventual live demonstration.
 
-Current checkpoint: Stages 1–6 complete + Web frontend complete. Basic RAG pipeline is fully functional and accessible through a web interface at http://localhost:5173. Git tag: baseline-rag-v1. Next: Stage 7 — Document security (signatures, integrity, provenance).
+Current checkpoint: Stages 1–6 complete + Web frontend dark-theme redesign complete + full code review fixes applied (2026-08-01). Frontend now uses Cyber-Metric Enterprise Security design system with Tailwind v4 @theme tokens, zero hardcoded colors, shared PageHeader component, mobile-responsive sidebar, real source citations in Chat, dynamic backend health status, functional pagination/search in Documents, and accessibility improvements throughout (aria-labels, keyboard navigation, heading hierarchy). All 27 reviewer-identified issues fixed. Verification: tsc ✓, oxlint 0 warnings ✓, build ✓, zero hex colors in TSX ✓. Git tag: baseline-rag-v1. Next: Stage 7 — Document security (signatures, integrity, provenance). Before sharing the repo: rotate the leaked Zai key (commit 88df6e8) and purge git history.

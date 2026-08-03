@@ -9,5 +9,16 @@
     "total_chars": 137,
     "total_chunks": 1,
     "status": "processed"
+  },
+  "DOC-4E35BCFF": {
+    "document_id": "DOC-4E35BCFF",
+    "filename": "NIST.SP.800-160v1r1.pdf",
+    "sha256": "eced250e47e542698ddfd5e72bd7feae14268e72a1e9ea49af9984c0e01ff7b8",
+    "uploaded_by": "pavan",
+    "uploaded_at": "2026-07-27T08:30:17.036019",
+    "total_pages": 195,
+    "total_chars": 525440,
+    "total_chunks": 1419,
+    "status": "processed"
   }
 }

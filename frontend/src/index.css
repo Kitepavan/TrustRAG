@@ -1,6 +1,39 @@
 @import "tailwindcss";
 
-/* TrustRAG Enterprise Security Dashboard Theme */
+/* TrustRAG Enterprise Security Dashboard Theme - Dark Mode */
+@theme {
+  --color-background: #0a0c10;
+  --color-surface: #111318;
+  --color-surface-dim: #111318;
+  --color-surface-bright: #37393e;
+  --color-surface-container-lowest: #0c0e12;
+  --color-surface-container-low: #1a1c20;
+  --color-surface-container: #1e2024;
+  --color-surface-container-high: #282a2e;
+  --color-surface-container-highest: #333539;
+  --color-surface-variant: #333539;
+  --color-on-surface: #e2e2e8;
+  --color-on-surface-variant: #c0c7d4;
+  --color-outline: #8b919d;
+  --color-outline-variant: #414752;
+  --color-primary: #a2c9ff;
+  --color-on-primary: #00315c;
+  --color-primary-container: #58a6ff;
+  --color-on-primary-container: #003a6b;
+  --color-secondary: #67df70;
+  --color-on-secondary: #00390d;
+  --color-secondary-container: #27a640;
+  --color-on-secondary-container: #00320a;
+  --color-tertiary: #fabc45;
+  --color-on-tertiary: #422c00;
+  --color-tertiary-container: #d29922;
+  --color-on-tertiary-container: #4d3500;
+  --color-error: #ffb4ab;
+  --color-on-error: #690005;
+  --color-error-container: #93000a;
+  --color-on-error-container: #ffdad6;
+}
+
 @layer base {
   * {
     margin: 0;
@@ -9,14 +42,14 @@
   }
 
   body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-    background-color: #f8fafc;
-    color: #0f172a;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    background-color: #0a0c10;
+    color: #e2e2e8;
     -webkit-font-smoothing: antialiased;
   }
 
   code, .mono {
-    font-family: 'SF Mono', 'Fira Code', 'Fira Mono', Menlo, Consolas, monospace;
+    font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', 'Fira Mono', Menlo, Consolas, monospace;
   }
 }
 
@@ -25,12 +58,31 @@
   width: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: #f1f5f9;
+  background: #1a1c20;
 }
 ::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
+  background: #414752;
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
+  background: #8b919d;
+}
+
+/* Material Symbols */
+.material-symbols-outlined {
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+}
+
+/* Pipeline connector */
+.pipeline-connector {
+  position: relative;
+}
+.pipeline-connector::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: -24px;
+  width: 16px;
+  height: 1px;
+  background-color: #414752;
 }

@@ -1,102 +1,242 @@
+import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
 import { useApi } from '../hooks/useApi';
-import Card from '../components/Card';
+import PageHeader from '../components/PageHeader';
 
 const pipelineSteps = [
-  { label: 'Documents', icon: '📄' },
-  { label: 'Text Extraction', icon: '🔍' },
-  { label: 'Chunking', icon: '✂️' },
-  { label: 'Embeddings', icon: '🧮' },
-  { label: 'ChromaDB', icon: '🗄️' },
-  { label: 'Retrieval', icon: '🔎' },
-  { label: 'LLM', icon: '🤖' },
+  { label: 'Document', icon: 'description' },
+  { label: 'Extraction', icon: 'search' },
+  { label: 'Chunking', icon: 'content_cut' },
+  { label: 'Embeddings', icon: 'scatter_plot' },
+  { label: 'ChromaDB', icon: 'inventory_2' },
+  { label: 'Retrieval', icon: 'manage_search' },
+  { label: 'LLM', icon: 'psychology' },
+  { label: 'Response', icon: 'chat' },
 ];
 
 export default function Dashboard() {
   const { data: stats, loading, error } = useApi(() => api.getDashboardStats());
+  const navigate = useNavigate();
 
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+        <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700">
+      <div className="bg-error-container/20 border border-error rounded p-4 text-error">
         Unable to connect to TrustRAG backend. Please ensure the server is running.
       </div>
     );
   }
 
-  return (
-    <div>
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-slate-900">Dashboard</h1>
-        <p className="text-sm text-slate-500 mt-1">TrustRAG baseline RAG system overview</p>
-      </div>
+  const ragOperational = stats?.rag_status === 'operational';
+  const vectorOnline = stats?.vector_db_status === 'online';
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 mb-8">
-        <Card
-          title="Documents Indexed"
-          value={stats?.documents_indexed ?? 0}
-          icon="📄"
-        />
-        <Card
-          title="Chunks Stored"
-          value={stats?.chunks_stored ?? 0}
-          icon="🧩"
-        />
-        <Card
-          title="Vector Database"
-          value={stats?.vector_db_status ?? 'Unknown'}
-          subtitle="ChromaDB"
-          icon="🗄️"
-          status={stats?.vector_db_status === 'online' ? 'online' : 'offline'}
-        />
-        <Card
-          title="Embedding Model"
-          value={stats?.embedding_model ?? 'Unknown'}
-          subtitle="768 dimensions"
-          icon="🧮"
-          status="online"
-        />
-        <Card
-          title="RAG Engine"
-          value={stats?.rag_status === 'operational' ? 'Ready' : 'Unknown'}
-          subtitle={stats?.llm_model ?? ''}
-          icon="🤖"
-          status={stats?.rag_status === 'operational' ? 'online' : 'offline'}
-        />
+  return (
+    <div className="max-w-[1400px]">
+      <PageHeader breadcrumb={<>/ workspace / <span className="text-primary font-bold">dashboard</span></>} />
+
+      {/* Hero Header Section */}
+      <section className="mb-8">
+        <div className="flex items-center space-x-3 mb-4">
+          <span className="text-[11px] leading-[16px] tracking-[0.05em] font-bold text-primary px-2 py-0.5 bg-primary/10 border border-primary/20 rounded">
+            TRUSTED AI
+          </span>
+          <span className="w-12 h-[1px] bg-outline-variant" aria-hidden="true"></span>
+        </div>
+        <h1 className="text-[32px] leading-[40px] tracking-[-0.02em] font-bold text-on-surface mb-4">
+          Secure Retrieval-Augmented Generation
+        </h1>
+        <p className="text-[14px] leading-[20px] text-on-surface-variant max-w-2xl">
+          TrustRAG bridges the gap between massive document repositories and secure LLM responses through cryptographically verified retrieval and robust isolation mechanisms.
+        </p>
+      </section>
+
+      {/* Key Metrics (Bento Grid Style) */}
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-8">
+        {/* Documents Indexed */}
+        <div className="bg-surface-container border border-outline-variant p-4 flex flex-col justify-between">
+          <span className="text-[11px] leading-[16px] tracking-[0.05em] font-bold text-on-surface-variant uppercase">
+            DOCUMENTS INDEXED
+          </span>
+          <div className="mt-4 flex items-baseline space-x-2">
+            <span className="text-[24px] leading-[32px] font-semibold text-primary">
+              {stats?.documents_indexed ?? 0}
+            </span>
+            <span className="text-[12px] leading-[16px] text-secondary">LIVE</span>
+          </div>
+        </div>
+
+        {/* Chunks Stored */}
+        <div className="bg-surface-container border border-outline-variant p-4 flex flex-col justify-between">
+          <span className="text-[11px] leading-[16px] tracking-[0.05em] font-bold text-on-surface-variant uppercase">
+            CHUNKS STORED
+          </span>
+          <div className="mt-4">
+            <span className="text-[24px] leading-[32px] font-semibold text-on-surface">
+              {(stats?.chunks_stored ?? 0).toLocaleString()}
+            </span>
+          </div>
+        </div>
+
+        {/* Vector DB */}
+        <div className="bg-surface-container border border-outline-variant p-4 flex flex-col justify-between">
+          <span className="text-[11px] leading-[16px] tracking-[0.05em] font-bold text-on-surface-variant uppercase">
+            VECTOR DATABASE
+          </span>
+          <div className="mt-4 flex items-center space-x-2">
+            <span className="material-symbols-outlined text-primary" aria-hidden="true">database</span>
+            <span className="text-[14px] leading-[20px] font-medium">{vectorOnline ? 'ChromaDB' : 'Offline'}</span>
+          </div>
+        </div>
+
+        {/* Embedding Model */}
+        <div className="bg-surface-container border border-outline-variant p-4 flex flex-col justify-between">
+          <span className="text-[11px] leading-[16px] tracking-[0.05em] font-bold text-on-surface-variant uppercase">
+            EMBEDDING MODEL
+          </span>
+          <div className="mt-4">
+            <span className="text-[14px] leading-[20px] font-medium text-tertiary">
+              {stats?.embedding_model ?? 'EmbeddingGemma-300M'}
+            </span>
+          </div>
+        </div>
+
+        {/* RAG Engine Status */}
+        <div className="bg-surface-container border border-outline-variant p-4 flex flex-col justify-between">
+          <span className="text-[11px] leading-[16px] tracking-[0.05em] font-bold text-on-surface-variant uppercase">
+            RAG ENGINE
+          </span>
+          <div className="mt-4 flex items-center space-x-2">
+            <span className={`w-2.5 h-2.5 rounded-full ${ragOperational ? 'bg-secondary' : 'bg-error'}`}></span>
+            <span className={`text-[14px] leading-[20px] font-medium ${ragOperational ? 'text-secondary' : 'text-error'}`}>
+              {ragOperational ? 'Operational' : 'Unavailable'}
+            </span>
+          </div>
+        </div>
       </div>
 
       {/* Pipeline Visualization */}
-      <div className="bg-white rounded-lg border border-slate-200 p-6">
-        <h2 className="text-lg font-semibold text-slate-900 mb-1">Baseline RAG Pipeline</h2>
-        <p className="text-sm text-slate-500 mb-6">Current data flow without security mechanisms</p>
+      <div className="bg-surface-container border border-outline-variant p-6 mb-8">
+        <div className="flex items-center space-x-3 mb-6">
+          <span className="material-symbols-outlined text-primary" aria-hidden="true">account_tree</span>
+          <h2 className="text-[18px] leading-[24px] font-semibold text-on-surface">Baseline RAG Pipeline</h2>
+        </div>
 
         <div className="flex items-center justify-between gap-2 overflow-x-auto pb-2">
           {pipelineSteps.map((step, i) => (
             <div key={step.label} className="flex items-center">
-              <div className="flex flex-col items-center gap-2 min-w-[90px]">
-                <div className="w-14 h-14 rounded-lg bg-slate-50 border border-slate-200 flex items-center justify-center text-2xl">
-                  {step.icon}
+              <div className="flex flex-col items-center gap-3 min-w-[90px]">
+                <div className="w-14 h-14 rounded bg-surface-container-high border border-outline-variant flex items-center justify-center">
+                  <span className="material-symbols-outlined text-on-surface-variant" aria-hidden="true">{step.icon}</span>
                 </div>
-                <span className="text-xs font-medium text-slate-600 text-center">
+                <span className="text-[12px] font-medium text-on-surface-variant text-center">
                   {step.label}
                 </span>
               </div>
               {i < pipelineSteps.length - 1 && (
                 <div className="flex items-center mx-1 mt-[-20px]">
-                  <div className="w-8 h-px bg-slate-300" />
-                  <div className="w-0 h-0 border-t-[5px] border-t-transparent border-b-[5px] border-b-transparent border-l-[6px] border-l-slate-300" />
+                  <div className="w-8 h-px bg-outline-variant" />
+                  <div className="w-0 h-0 border-t-[5px] border-t-transparent border-b-[5px] border-b-transparent border-l-[6px] border-l-outline-variant" />
                 </div>
               )}
             </div>
           ))}
+        </div>
+
+        {/* Security Layer */}
+        <div className="mt-6 p-4 border border-dashed border-outline-variant rounded bg-surface-dim">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <span className="material-symbols-outlined text-on-surface-variant" aria-hidden="true">shield</span>
+              <div>
+                <span className="text-[11px] leading-[16px] tracking-[0.05em] font-bold text-on-surface-variant uppercase">
+                  PROPOSED SECURITY LAYER
+                </span>
+                <p className="text-[14px] leading-[20px] text-on-surface-variant mt-1">
+                  Coming in next development phase: Differential privacy, PII scrubbing, and verified retrieval attestations.
+                </p>
+              </div>
+            </div>
+            <span className="text-[11px] leading-[16px] tracking-[0.05em] font-bold text-on-surface-variant px-3 py-1 border border-outline-variant rounded">
+              PLANNED
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Bottom Section */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* Pipeline Components */}
+        <div className="lg:col-span-2 bg-surface-container border border-outline-variant p-6">
+          <h3 className="text-[11px] leading-[16px] tracking-[0.05em] font-bold text-on-surface-variant uppercase mb-4">
+            PIPELINE COMPONENTS
+          </h3>
+          <div className="space-y-3 font-mono text-[12px] leading-[16px]">
+            <div className="flex items-center justify-between">
+              <span className="text-on-surface-variant">Vector Database</span>
+              <span className="text-secondary">{vectorOnline ? 'ONLINE' : 'OFFLINE'}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-on-surface-variant">RAG Pipeline</span>
+              <span className="text-secondary">{ragOperational ? 'OPERATIONAL' : 'DEGRADED'}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-on-surface-variant">LLM Provider</span>
+              <span className="text-on-surface-variant">{stats?.llm_model ?? 'Not configured'}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-on-surface-variant">Embedding Model</span>
+              <span className="text-on-surface-variant">{stats?.embedding_model ?? 'EmbeddingGemma-300M'}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-on-surface-variant">Documents Indexed</span>
+              <span className="text-on-surface-variant">{stats?.documents_indexed ?? 0}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-on-surface-variant">Chunks Stored</span>
+              <span className="text-on-surface-variant">{(stats?.chunks_stored ?? 0).toLocaleString()}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Quick Actions */}
+        <div className="bg-surface-container border border-outline-variant p-6">
+          <h3 className="text-[11px] leading-[16px] tracking-[0.05em] font-bold text-on-surface-variant uppercase mb-4">
+            QUICK ACTIONS
+          </h3>
+          <div className="space-y-3">
+            <button
+              type="button"
+              onClick={() => navigate('/documents')}
+              className="w-full flex items-center justify-center space-x-2 bg-primary hover:bg-primary/90 text-on-primary py-3 px-4 rounded font-medium transition-colors"
+            >
+              <span className="material-symbols-outlined" aria-hidden="true">upload</span>
+              <span>Upload New Document</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate('/chat')}
+              className="w-full flex items-center justify-center space-x-2 bg-transparent border border-outline-variant hover:bg-surface-variant text-on-surface py-3 px-4 rounded font-medium transition-colors"
+            >
+              <span className="material-symbols-outlined" aria-hidden="true">search</span>
+              <span>Query Knowledge Base</span>
+            </button>
+          </div>
+          <div className="mt-6">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[14px] leading-[20px] text-on-surface-variant">Backend Connectivity</span>
+              <span className="text-[14px] leading-[20px] font-medium text-secondary">Healthy</span>
+            </div>
+            <div className="w-full h-2 bg-surface-variant rounded">
+              <div className="h-full bg-secondary rounded" style={{ width: '100%' }}></div>
+            </div>
+          </div>
         </div>
       </div>
     </div>

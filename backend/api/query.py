@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
@@ -6,6 +8,8 @@ from backend.rag.vectorstore import query_chunks
 from backend.rag.llm import generate_answer
 
 router = APIRouter(tags=["query"])
+
+logger = logging.getLogger(__name__)
 
 
 class QueryRequest(BaseModel):
@@ -25,7 +29,14 @@ def query_rag(req: QueryRequest):
     if not results:
         return {"answer": "No relevant documents found.", "sources": []}
 
-    answer = generate_answer(req.question, results)
+    try:
+        answer = generate_answer(req.question, results)
+    except Exception as e:
+        logger.exception("LLM call failed during query")
+        raise HTTPException(
+            status_code=502,
+            detail="The language model service is currently unavailable. Please try again later.",
+        ) from e
 
     sources = [
         {

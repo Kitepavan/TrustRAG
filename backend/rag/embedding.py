@@ -1,6 +1,13 @@
+import os
+
+from dotenv import load_dotenv
 from sentence_transformers import SentenceTransformer
 
-MODEL_PATH = "/home/pavan/AI-Models/embeddinggemma-300m"
+load_dotenv()
+
+MODEL_PATH = os.environ.get(
+    "EMBEDDING_MODEL_PATH", "/home/pavan/AI-Models/embeddinggemma-300m"
+)
 
 _model = None
 

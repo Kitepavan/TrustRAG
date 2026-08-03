@@ -1,0 +1,156 @@
+{
+  "runId": "b9301228",
+  "agent": "reviewer",
+  "task": "Perform a READ-ONLY code quality review of the TrustRAG web UI frontend. Do NOT modify, edit, or implement anything — only read and report findings.\n\nThe project is at /home/pavan/TrustRAG. The frontend is in /home/pavan/TrustRAG/frontend.\n\nFocus areas:\n1. The React + TypeScript + Vite + Tailwind frontend source under /home/pavan/TrustRAG/frontend/src — especially these recently-updated files:\n   - src/pages/Dashboard.tsx\n   - src/pages/Documents.tsx\n   - src/pages/Chat.tsx\n   - src/pages/KnowledgeBase.tsx\n   - src/pages/SystemStatus.tsx\n   - src/components/Sidebar.tsx\n   - src/components/Layout.tsx\n   - src/components/Card.tsx\n   - src/components/StatusBadge.tsx\n   - src/components/FileUpload.tsx\n   - src/index.css\n   - src/App.tsx, src/main.tsx, src/services/api.ts, src/hooks/useApi.ts, src/types/index.ts\n2. Check the recent dark-theme redesign for:\n   - TypeScript correctness and type safety issues\n   - Hardcoded hex colors vs. reusable tokens/design system consistency\n   - Duplicated or inconsistent styling patterns\n   - Unused imports, dead code, or leftover code\n   - Accessibility issues (contrast, aria labels, semantic HTML)\n   - Responsive layout problems\n   - Any runtime/React anti-patterns (missing keys, stale closures, state issues)\n   - Build config issues (vite.config.ts, tsconfig files, index.html)\n   - Whether inline Tailwind arbitrary color values (e.g. bg-[#1e2024]) scattered across pages would be better centralized as CSS variables/theme tokens\n3. Note any specific issues with file paths and line numbers. Report findings in the standard review format (Correct / Fixed / Blocker / Note). Since this is review-only, do not write any files.\n\nReport the issues found with evidence (file paths + line numbers).",
+  "exitCode": 0,
+  "usage": {
+    "input": 43233,
+    "output": 24061,
+    "cacheRead": 865408,
+    "cacheWrite": 0,
+    "cost": 0,
+    "turns": 29
+  },
+  "model": "opencode/deepseek-v4-flash-free:high",
+  "attemptedModels": [
+    "opencode/deepseek-v4-flash-free:high"
+  ],
+  "modelAttempts": [
+    {
+      "model": "opencode/deepseek-v4-flash-free:high",
+      "success": true,
+      "exitCode": 0,
+      "usage": {
+        "input": 43233,
+        "output": 24061,
+        "cacheRead": 865408,
+        "cacheWrite": 0,
+        "cost": 0,
+        "turns": 29
+      }
+    }
+  ],
+  "durationMs": 255809,
+  "toolCount": 67,
+  "launchContractDigest": "5818d62105ee3c2d3c8424fd0c01a6f640a122892a64b258a039c332d8d89e12",
+  "acceptance": {
+    "status": "attested",
+    "evidenceStatus": "attested",
+    "explicit": false,
+    "effectiveAcceptance": {
+      "level": "attested",
+      "explicit": false,
+      "inferredReason": [
+        "read-only/reviewer-style agent"
+      ],
+      "criteria": [
+        {
+          "id": "criterion-1",
+          "must": "Return concrete findings with file paths and severity when applicable",
+          "evidence": [
+            "review-findings",
+            "residual-risks"
+          ],
+          "severity": "required"
+        }
+      ],
+      "evidence": [
+        "review-findings",
+        "residual-risks"
+      ],
+      "verify": [],
+      "stopRules": []
+    },
+    "inferredReason": [
+      "read-only/reviewer-style agent"
+    ],
+    "criteria": [
+      {
+        "id": "criterion-1",
+        "must": "Return concrete findings with file paths and severity when applicable",
+        "evidence": [
+          "review-findings",
+          "residual-risks"
+        ],
+        "severity": "required"
+      }
+    ],
+    "runtimeChecks": [],
+    "verifyRuns": [],
+    "childReport": {
+      "criteriaSatisfied": [
+        {
+          "id": "criterion-1",
+          "status": "satisfied",
+          "evidence": "Read all 17 requested frontend files (5 pages, 5 components, index.css, App/main/api/useApi/types) plus vite.config.ts, tsconfig*.json, index.html, .oxlintrc.json, and backend routes for API-contract cross-checking. Produced 27 concrete findings with file paths + line numbers across Correct/Fixed/Blocker/Note categories, with severity. Verified via tsc -b, oxlint, and npm run build (all passed). No files were modified (review-only)."
+        }
+      ],
+      "changedFiles": [],
+      "testsAddedOrUpdated": [],
+      "commandsRun": [
+        {
+          "command": "cd /home/pavan/TrustRAG/frontend && npx tsc -b --pretty false",
+          "result": "passed",
+          "summary": "Strict-mode TypeScript project typecheck passed with 0 errors"
+        },
+        {
+          "command": "cd /home/pavan/TrustRAG/frontend && npx oxlint",
+          "result": "passed",
+          "summary": "oxlint reported 0 errors (only 2 rules configured)"
+        },
+        {
+          "command": "cd /home/pavan/TrustRAG/frontend && npm run build",
+          "result": "passed",
+          "summary": "tsc -b && vite build succeeded; dist 281.77 kB JS / 24.31 kB CSS"
+        },
+        {
+          "command": "grep/contrast/usage audits (hex-color counts, aria/role grep, custom CSS class usage, git status)",
+          "result": "passed",
+          "summary": "~470 inline hex colors across 12 files vs 14 unused theme utility classes; 0 aria/role/label attributes; Card.tsx/getHealth/icons.svg dead; no staged files"
+        }
+      ],
+      "validationOutput": [
+        "tsc -b: 0 errors. oxlint: 0 errors. vite build: success (36 modules). Contrast ratios all AA+ for text (worst 4.54:1 #8b919d on #282a2e). Backend routes match all api.ts endpoints."
+      ],
+      "residualRisks": [
+        "Backend CORS allow_origins=['*'] with allow_credentials=True (backend/main.py:16-18) — security anti-pattern the frontend direct-call design depends on; not in frontend scope.",
+        "Static/mock data (Chat sources sidebar, dashboard metrics) will mislead once real backend data diverges; classified Fixed but remains in code until removed.",
+        "Chat sources count badge and static sidebar are internally inconsistent at runtime (shows 0 while cards render).",
+        "No automated accessibility testing exists; a11y findings rely on manual inspection.",
+        "Frontend working tree has unstaged modifications and untracked files (.opencode/, .pi-subagents/, opencode.json, data/trusted/*.pdf); not staged."
+      ],
+      "noStagedFiles": true,
+      "diffSummary": "Read-only review — no files written, edited, or staged.",
+      "reviewFindings": [
+        "note: index.css:38-56 + 64-77 - 14 theme utility classes defined but 0 usages; ~470 inline arbitrary hex colors across 12 files bypass tokens (centralize)",
+        "fixed: Chat.tsx:206-256 - hardcoded mock source cards never reflect real response.sources; count badge Chat.tsx:202 shows 0 after user messages (trust/correctness)",
+        "fixed: Chat.tsx:54-58 - KeyboardEvent passed into handleSubmit(FormEvent) type-smell",
+        "fixed: Documents.tsx:31 - setTimeout toast without cleanup; setState-after-unmount + overlapping-upload race",
+        "fixed: useApi.ts:17 - ref write during render (anti-pattern); useApi.ts:19-20 refetch clears data -> SystemStatus refresh full-page spinner",
+        "fixed: Documents.tsx:180-189 - non-functional pagination; Documents.tsx:64-72/202 and Dashboard.tsx:222-234 - inert buttons; Documents.tsx:109 - uncontrolled search",
+        "fixed: Dashboard.tsx:234-237, Documents.tsx:208-220/249/262 - hardcoded mock metrics mixed with live API data",
+        "fixed: FileUpload.tsx:87 - 'MAX 100MB' UI vs 50MB validation (FileUpload.tsx:20-21); FileUpload.tsx:49-61 - dropzone not keyboard accessible, no role/aria-label",
+        "fixed: Dashboard.tsx:49-50, Documents.tsx:49-51, Chat.tsx:78-80, KnowledgeBase.tsx:25-27, SystemStatus.tsx:40-42 - icon-only buttons without aria-label (0 aria/role/label in codebase)",
+        "fixed: KnowledgeBase.tsx:87-94 - expandable div row with no role/aria-expanded/keyboard support",
+        "fixed: Dashboard.tsx:63 - no h1 on Dashboard; Chat.tsx:259 - h4 without h1-h3",
+        "fixed: Layout.tsx:8 + Sidebar.tsx:13 - fixed 260px sidebar with no mobile strategy; Chat.tsx:62,197 - fixed heights/350px sidebar overflow on small screens",
+        "fixed: Dashboard.tsx:37, Documents.tsx:37, Chat.tsx:66, KnowledgeBase.tsx:13, SystemStatus.tsx:28 - '-ml-6 -mt-6' magic-number hack coupled to Layout p-6; Chat header also missing sticky top-0",
+        "fixed: KnowledgeBase.tsx:42,88 - grid-cols-12 no responsive/overflow fallback",
+        "fixed: Card.tsx - entire component unused; api.ts:19 - getHealth unused; public/icons.svg unused; useApi.ts:32 - dead eslint-disable comment",
+        "fixed: Sidebar.tsx:55 - hardcoded 'Status: Healthy'; SystemStatus.tsx:110-123 - duplicate 'Model' row latent; index.html:12-18 - duplicated inline styles vs index.css",
+        "note: backend/main.py:16-18 - CORS wildcard+credentials (backend, adjacent to api.ts direct-call design)",
+        "no blockers: tsc -b, oxlint, and production build all pass"
+      ],
+      "manualNotes": "Review-only task: no source files were modified (verified by git status/diff). The theme tokens and utility classes in index.css are already defined but unused, making centralization of the ~470 inline hex colors a low-effort, high-value fix. Contrast is generally strong; the main a11y gaps are keyboard access (FileUpload, KnowledgeBase rows) and missing aria-labels on icon-only buttons."
+    }
+  },
+  "effects": {
+    "fileMutation": {
+      "status": "not-applicable",
+      "expected": false,
+      "attempted": true
+    }
+  },
+  "transcriptPath": "/home/pavan/TrustRAG/.pi-subagents/artifacts/b9301228_reviewer_0_transcript.jsonl",
+  "timestamp": 1785558326726
+}

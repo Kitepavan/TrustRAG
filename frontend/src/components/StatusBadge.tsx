@@ -4,26 +4,27 @@ interface StatusBadgeProps {
 }
 
 const statusStyles: Record<string, { bg: string; text: string; dot: string }> = {
-  online: { bg: 'bg-green-50', text: 'text-green-700', dot: 'bg-green-500' },
-  ready: { bg: 'bg-green-50', text: 'text-green-700', dot: 'bg-green-500' },
-  connected: { bg: 'bg-green-50', text: 'text-green-700', dot: 'bg-green-500' },
-  operational: { bg: 'bg-green-50', text: 'text-green-700', dot: 'bg-green-500' },
-  verified: { bg: 'bg-green-50', text: 'text-green-700', dot: 'bg-green-500' },
-  processed: { bg: 'bg-green-50', text: 'text-green-700', dot: 'bg-green-500' },
-  error: { bg: 'bg-red-50', text: 'text-red-700', dot: 'bg-red-500' },
-  offline: { bg: 'bg-red-50', text: 'text-red-700', dot: 'bg-red-500' },
-  failed: { bg: 'bg-red-50', text: 'text-red-700', dot: 'bg-red-500' },
-  degraded: { bg: 'bg-amber-50', text: 'text-amber-700', dot: 'bg-amber-500' },
-  warning: { bg: 'bg-amber-50', text: 'text-amber-700', dot: 'bg-amber-500' },
+  online: { bg: 'bg-secondary-container/20', text: 'text-secondary', dot: 'bg-secondary' },
+  ready: { bg: 'bg-secondary-container/20', text: 'text-secondary', dot: 'bg-secondary' },
+  connected: { bg: 'bg-secondary-container/20', text: 'text-secondary', dot: 'bg-secondary' },
+  operational: { bg: 'bg-secondary-container/20', text: 'text-secondary', dot: 'bg-secondary' },
+  verified: { bg: 'bg-secondary-container/20', text: 'text-secondary', dot: 'bg-secondary' },
+  processed: { bg: 'bg-secondary-container/20', text: 'text-secondary', dot: 'bg-secondary' },
+  indexed: { bg: 'bg-secondary-container/20', text: 'text-secondary', dot: 'bg-secondary' },
+  error: { bg: 'bg-error-container/20', text: 'text-error', dot: 'bg-error' },
+  offline: { bg: 'bg-error-container/20', text: 'text-error', dot: 'bg-error' },
+  failed: { bg: 'bg-error-container/20', text: 'text-error', dot: 'bg-error' },
+  degraded: { bg: 'bg-tertiary-container/20', text: 'text-tertiary', dot: 'bg-tertiary' },
+  warning: { bg: 'bg-tertiary-container/20', text: 'text-tertiary', dot: 'bg-tertiary' },
 };
 
 export default function StatusBadge({ status, size = 'sm' }: StatusBadgeProps) {
   const key = status.toLowerCase();
-  const style = statusStyles[key] || { bg: 'bg-slate-50', text: 'text-slate-700', dot: 'bg-slate-400' };
-  const sizeClasses = size === 'sm' ? 'text-xs px-2 py-0.5' : 'text-sm px-3 py-1';
+  const style = statusStyles[key] || { bg: 'bg-surface-variant', text: 'text-on-surface-variant', dot: 'bg-outline' };
+  const sizeClasses = size === 'sm' ? 'text-[12px] leading-[16px] px-2 py-0.5' : 'text-[14px] leading-[20px] px-3 py-1';
 
   return (
-    <span className={`inline-flex items-center gap-1.5 rounded-full font-medium ${style.bg} ${style.text} ${sizeClasses}`}>
+    <span className={`inline-flex items-center gap-1.5 rounded font-medium ${style.bg} ${style.text} ${sizeClasses}`}>
       <span className={`w-1.5 h-1.5 rounded-full ${style.dot}`} />
       {status}
     </span>

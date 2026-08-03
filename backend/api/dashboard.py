@@ -11,15 +11,23 @@ def get_dashboard_stats():
     """Return real-time dashboard statistics."""
     metadata = get_metadata_store()
     doc_count = len(metadata)
-    chunk_count = get_collection_count()
+
+    try:
+        chunk_count = get_collection_count()
+        vector_db_status = "online"
+        rag_status = "operational"
+    except Exception:
+        chunk_count = 0
+        vector_db_status = "error"
+        rag_status = "degraded"
 
     return {
         "documents_indexed": doc_count,
         "chunks_stored": chunk_count,
-        "vector_db_status": "online",
+        "vector_db_status": vector_db_status,
         "embedding_model": "EmbeddingGemma-300M",
         "llm_model": "glm-4.7-flash",
-        "rag_status": "operational",
+        "rag_status": rag_status,
     }
 
 

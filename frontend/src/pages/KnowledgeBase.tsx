@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { api } from '../services/api';
 import { useApi } from '../hooks/useApi';
+import PageHeader from '../components/PageHeader';
 import type { DocumentInfo } from '../types';
 
 export default function KnowledgeBase() {
@@ -8,15 +9,20 @@ export default function KnowledgeBase() {
   const [expandedDoc, setExpandedDoc] = useState<string | null>(null);
 
   return (
-    <div>
+    <div className="max-w-[1400px]">
+      <PageHeader breadcrumb={<>SYSTEM / <span className="text-primary font-bold">KNOWLEDGE BASE</span></>} />
+
+      {/* Page Title */}
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-slate-900">Knowledge Base</h1>
-        <p className="text-sm text-slate-500 mt-1">View all indexed documents and their chunk data</p>
+        <h1 className="text-[24px] leading-[32px] font-semibold text-on-surface">Knowledge Base</h1>
+        <p className="text-[14px] leading-[20px] text-on-surface-variant mt-1">
+          View all indexed documents and their chunk data.
+        </p>
       </div>
 
-      <div className="bg-white rounded-lg border border-slate-200">
+      <div className="bg-surface-container border border-outline-variant overflow-x-auto">
         {/* Table Header */}
-        <div className="grid grid-cols-12 gap-4 px-6 py-3 border-b border-slate-200 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+        <div className="grid grid-cols-12 gap-4 px-6 py-3 border-b border-outline-variant text-[11px] leading-[16px] tracking-[0.05em] font-bold text-on-surface-variant uppercase min-w-[900px]">
           <div className="col-span-4">Document</div>
           <div className="col-span-2">Document ID</div>
           <div className="col-span-1 text-center">Pages</div>
@@ -26,15 +32,15 @@ export default function KnowledgeBase() {
         </div>
 
         {loading ? (
-          <div className="p-8 text-center text-slate-400">Loading knowledge base...</div>
+          <div className="p-8 text-center text-on-surface-variant">Loading knowledge base...</div>
         ) : error ? (
-          <div className="p-8 text-center text-red-500">{error}</div>
+          <div className="p-8 text-center text-error">{error}</div>
         ) : !data?.documents.length ? (
-          <div className="p-8 text-center text-slate-400">
+          <div className="p-8 text-center text-on-surface-variant">
             No documents in the knowledge base. Upload documents from the Documents page.
           </div>
         ) : (
-          <div className="divide-y divide-slate-100">
+          <div className="divide-y divide-outline-variant min-w-[900px]">
             {data.documents.map((doc) => (
               <DocumentRow
                 key={doc.filename}
@@ -49,7 +55,7 @@ export default function KnowledgeBase() {
 
       {/* Summary */}
       {data && data.documents.length > 0 && (
-        <div className="mt-4 text-sm text-slate-500">
+        <div className="mt-4 text-[14px] leading-[20px] text-on-surface-variant">
           Total: {data.count} documents indexed
         </div>
       )}
@@ -61,34 +67,44 @@ function DocumentRow({ doc, expanded, onToggle }: { doc: DocumentInfo; expanded:
   return (
     <div>
       <div
+        role="button"
+        tabIndex={0}
+        aria-expanded={expanded}
+        aria-label={`${expanded ? 'Collapse' : 'Expand'} details for ${doc.filename}`}
         onClick={onToggle}
-        className="grid grid-cols-12 gap-4 px-6 py-4 hover:bg-slate-50 cursor-pointer transition-colors items-center"
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onToggle();
+          }
+        }}
+        className="grid grid-cols-12 gap-4 px-6 py-4 hover:bg-surface-variant cursor-pointer transition-colors items-center"
       >
-        <div className="col-span-4 flex items-center gap-2">
-          <span className={`text-xs transition-transform ${expanded ? 'rotate-90' : ''}`}>▸</span>
-          <span className="text-lg">📄</span>
-          <span className="text-sm font-medium text-slate-900 truncate">{doc.filename}</span>
+        <div className="col-span-4 flex items-center gap-3">
+          <span className={`material-symbols-outlined text-[16px] transition-transform ${expanded ? 'rotate-90' : ''} text-on-surface-variant`} aria-hidden="true">chevron_right</span>
+          <span className="material-symbols-outlined text-primary" aria-hidden="true">description</span>
+          <span className="text-[14px] leading-[20px] font-medium text-on-surface truncate">{doc.filename}</span>
         </div>
-        <div className="col-span-2 text-xs text-slate-500 mono truncate">
+        <div className="col-span-2 text-[12px] leading-[16px] text-on-surface-variant font-mono truncate">
           {doc.document_id || '—'}
         </div>
-        <div className="col-span-1 text-center text-sm text-slate-700">
+        <div className="col-span-1 text-center text-[14px] leading-[20px] text-on-surface-variant">
           {doc.total_pages ?? '—'}
         </div>
-        <div className="col-span-1 text-center text-sm font-medium text-slate-700">
+        <div className="col-span-1 text-center text-[14px] leading-[20px] font-medium text-on-surface-variant">
           {doc.total_chunks ?? '—'}
         </div>
-        <div className="col-span-2 text-xs text-slate-500">
+        <div className="col-span-2 text-[12px] leading-[16px] text-on-surface-variant">
           {doc.uploaded_at ? new Date(doc.uploaded_at).toLocaleDateString() : '—'}
         </div>
-        <div className="col-span-2 text-xs text-slate-400 mono truncate">
+        <div className="col-span-2 text-[12px] leading-[16px] text-outline font-mono truncate">
           {doc.sha256 ? `${doc.sha256.substring(0, 12)}...` : '—'}
         </div>
       </div>
 
       {/* Expanded Details */}
       {expanded && (
-        <div className="px-6 pb-4 bg-slate-50 border-t border-slate-100">
+        <div className="px-6 pb-4 bg-surface-dim border-t border-outline-variant">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 py-4">
             <DetailItem label="Document ID" value={doc.document_id || '—'} />
             <DetailItem label="Filename" value={doc.filename} />
@@ -101,8 +117,8 @@ function DocumentRow({ doc, expanded, onToggle }: { doc: DocumentInfo; expanded:
           </div>
           {doc.sha256 && (
             <div className="mt-2">
-              <p className="text-xs text-slate-500 mb-1">SHA-256 Hash</p>
-              <p className="text-xs mono text-slate-600 bg-white rounded border border-slate-200 p-2 break-all">
+              <p className="text-[12px] leading-[16px] text-outline mb-1">SHA-256 Hash</p>
+              <p className="text-[12px] leading-[16px] font-mono text-on-surface-variant bg-surface-container rounded border border-outline-variant p-2 break-all">
                 {doc.sha256}
               </p>
             </div>
@@ -116,8 +132,8 @@ function DocumentRow({ doc, expanded, onToggle }: { doc: DocumentInfo; expanded:
 function DetailItem({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <p className="text-xs text-slate-400">{label}</p>
-      <p className="text-sm text-slate-700 font-medium">{value}</p>
+      <p className="text-[12px] leading-[16px] text-outline">{label}</p>
+      <p className="text-[14px] leading-[20px] text-on-surface font-medium">{value}</p>
     </div>
   );
 }

@@ -1,21 +1,27 @@
-import os
 import json
+import logging
+import os
 import shutil
 import tempfile
+import threading
 from pathlib import Path
 
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
 
 from backend.rag.ingestion import ingest_document
 from backend.rag.embedding import embed_chunks
-from backend.rag.vectorstore import add_chunks, get_collection_count
+from backend.rag.vectorstore import add_chunks
 
 router = APIRouter(prefix="/documents", tags=["documents"])
+
+logger = logging.getLogger(__name__)
 
 UPLOAD_DIR = Path("data/trusted")
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 METADATA_FILE = UPLOAD_DIR / "_metadata.json"
+
+_metadata_lock = threading.Lock()
 
 
 def get_metadata_store() -> dict:
@@ -48,6 +54,12 @@ async def upload_document(
             detail=f"Unsupported file type: {suffix}. Allowed: .pdf, .docx, .txt",
         )
 
+    if file.size and file.size > 50 * 1024 * 1024:
+        raise HTTPException(
+            status_code=413,
+            detail="File too large. Maximum size: 50MB",
+        )
+
     tmp_path = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
     try:
         shutil.copyfileobj(file.file, tmp_path)
@@ -61,23 +73,27 @@ async def upload_document(
         embedded = embed_chunks(result["chunks"])
         stored = add_chunks(embedded)
 
-        dest = UPLOAD_DIR / file.filename
+        # Server-side filename keyed by document_id: never trust the client
+        # filename for the destination path (prevents path traversal).
+        stored_name = f"{result['document_id']}{suffix}"
+        dest = UPLOAD_DIR / stored_name
         os.replace(tmp_path.name, str(dest))
 
-        # Store metadata for richer document listing
-        metadata = get_metadata_store()
-        metadata[result["document_id"]] = {
-            "document_id": result["document_id"],
-            "filename": result["filename"],
-            "sha256": result["sha256"],
-            "uploaded_by": result["uploaded_by"],
-            "uploaded_at": result["uploaded_at"],
-            "total_pages": result["total_pages"],
-            "total_chars": result["total_chars"],
-            "total_chunks": stored,
-            "status": result["status"],
-        }
-        save_metadata_store(metadata)
+        with _metadata_lock:
+            metadata = get_metadata_store()
+            metadata[result["document_id"]] = {
+                "document_id": result["document_id"],
+                "filename": result["filename"],
+                "stored_filename": stored_name,
+                "sha256": result["sha256"],
+                "uploaded_by": result["uploaded_by"],
+                "uploaded_at": result["uploaded_at"],
+                "total_pages": result["total_pages"],
+                "total_chars": result["total_chars"],
+                "total_chunks": stored,
+                "status": result["status"],
+            }
+            save_metadata_store(metadata)
 
         return {
             "document_id": result["document_id"],
@@ -93,7 +109,8 @@ async def upload_document(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("Document upload failed")
+        raise HTTPException(status_code=500, detail="Internal server error") from e
     finally:
         if os.path.exists(tmp_path.name):
             os.unlink(tmp_path.name)
@@ -105,19 +122,18 @@ async def list_documents():
     metadata = get_metadata_store()
     documents = []
 
-    # Iterate files on disk
-    for f in UPLOAD_DIR.iterdir():
-        if f.is_file() and f.name != "_metadata.json":
-            doc_info = {
-                "filename": f.name,
-                "size_bytes": f.stat().st_size,
-            }
-            # Merge stored metadata if available
-            for doc_id, meta in metadata.items():
-                if meta.get("filename") == f.name:
-                    doc_info.update(meta)
-                    break
-            documents.append(doc_info)
+    # Iterate metadata (source of truth) and stat the stored file for size
+    for doc_id, meta in metadata.items():
+        doc_info = dict(meta)
+        stored_name = meta.get("stored_filename") or meta.get("filename", "")
+        stored = UPLOAD_DIR / stored_name
+        if stored.is_file():
+            doc_info["size_bytes"] = stored.stat().st_size
+        else:
+            doc_info["size_bytes"] = 0
+        documents.append(doc_info)
+
+    documents.sort(key=lambda d: d.get("uploaded_at", ""), reverse=True)
 
     return {"documents": documents, "count": len(documents)}
 

@@ -2,9 +2,10 @@ import os
 import hashlib
 import uuid
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 
 import fitz  # PyMuPDF
+import docx  # python-docx
 
 from backend.rag.chunking import chunk_document
 
@@ -67,6 +68,29 @@ def extract_text_pdf(file_path: str) -> dict:
     }
 
 
+def extract_text_docx(file_path: str) -> dict:
+    """Extract text from DOCX using python-docx."""
+    doc = docx.Document(file_path)
+    paragraphs = [p.text for p in doc.paragraphs if p.text.strip()]
+    tables = []
+    for table in doc.tables:
+        for row in table.rows:
+            cells = [cell.text.strip() for cell in row.cells if cell.text.strip()]
+            if cells:
+                tables.append(" | ".join(cells))
+
+    full_text = "\n".join(paragraphs)
+    if tables:
+        full_text = f"{full_text}\n\n" + "\n".join(tables)
+
+    return {
+        "pages": [{"page_number": 1, "text": full_text, "char_count": len(full_text)}],
+        "total_pages": 1,
+        "full_text": full_text,
+        "total_chars": len(full_text),
+    }
+
+
 def extract_text(file_path: str) -> dict:
     """Extract text based on file type."""
     ext = Path(file_path).suffix.lower()
@@ -82,6 +106,8 @@ def extract_text(file_path: str) -> dict:
             "full_text": text,
             "total_chars": len(text),
         }
+    elif ext == ".docx":
+        return extract_text_docx(file_path)
     else:
         raise ValueError(f"Text extraction not implemented for {ext}")
 
@@ -111,7 +137,7 @@ def ingest_document(
         "filename": filename,
         "sha256": sha256_hash,
         "uploaded_by": uploaded_by,
-        "uploaded_at": datetime.utcnow().isoformat(),
+        "uploaded_at": datetime.now(timezone.utc).isoformat(),
         "total_pages": extraction["total_pages"],
         "total_chars": extraction["total_chars"],
         "total_chunks": len(chunks),
