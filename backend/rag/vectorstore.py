@@ -19,7 +19,7 @@ def get_collection():
 
 
 def add_chunks(chunks: list[dict]):
-    """Add embedded chunks to ChromaDB."""
+    """Add embedded chunks to ChromaDB with security metadata."""
     collection = get_collection()
 
     ids = [c["chunk_id"] for c in chunks]
@@ -27,9 +27,15 @@ def add_chunks(chunks: list[dict]):
     embeddings = [c["embedding"] for c in chunks]
     metadatas = [
         {
-            "document_id": c.get("document_id", ""),
-            "page_number": c.get("page_number", 0),
-            "char_count": c.get("char_count", 0),
+            "document_id": str(c.get("document_id", "")),
+            "page_number": int(c.get("page_number", 0)),
+            "char_count": int(c.get("char_count", 0)),
+            "sha256": str(c.get("sha256", "")),
+            "signature_valid": bool(c.get("signature_valid", False)),
+            "trust_status": str(c.get("trust_status", "Suspicious")),
+            # Required for Defense Filter 2 (RBAC) to fire: without a stored
+            # access_level every chunk defaults to INTERNAL and RBAC never blocks.
+            "access_level": str(c.get("access_level", "INTERNAL")),
         }
         for c in chunks
     ]
@@ -53,13 +59,14 @@ def query_chunks(query_embedding: list[float], top_k: int = 3) -> list[dict]:
     )
 
     chunks = []
-    for i in range(len(results["ids"][0])):
-        chunks.append({
-            "chunk_id": results["ids"][0][i],
-            "text": results["documents"][0][i],
-            "score": results["distances"][0][i],
-            "metadata": results["metadatas"][0][i],
-        })
+    if results and "ids" in results and results["ids"]:
+        for i in range(len(results["ids"][0])):
+            chunks.append({
+                "chunk_id": results["ids"][0][i],
+                "text": results["documents"][0][i],
+                "score": results["distances"][0][i],
+                "metadata": results["metadatas"][0][i],
+            })
 
     return chunks
 

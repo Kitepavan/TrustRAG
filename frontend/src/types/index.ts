@@ -35,6 +35,9 @@ export interface DocumentInfo {
   size_bytes: number;
   document_id?: string;
   sha256?: string;
+  is_signed?: boolean;
+  signature_valid?: boolean;
+  trust_status?: 'Trusted' | 'Suspicious' | 'Quarantined';
   uploaded_by?: string;
   uploaded_at?: string;
   total_pages?: number;
@@ -52,6 +55,9 @@ export interface UploadResponse {
   document_id: string;
   filename: string;
   sha256: string;
+  is_signed: boolean;
+  signature_valid: boolean;
+  trust_status: 'Trusted' | 'Suspicious' | 'Quarantined';
   uploaded_by: string;
   uploaded_at: string;
   total_pages: number;
@@ -64,6 +70,7 @@ export interface SourceChunk {
   chunk_id: string;
   document_id: string;
   page: number | string;
+  trust_status?: 'Trusted' | 'Suspicious' | 'Quarantined';
   score: number;
   text_preview: string;
 }
@@ -71,6 +78,8 @@ export interface SourceChunk {
 export interface QueryResponse {
   answer: string;
   sources: SourceChunk[];
+  mode?: string;
+  user_role?: string;
 }
 
 export interface ChatMessage {
@@ -79,4 +88,37 @@ export interface ChatMessage {
   content: string;
   sources?: SourceChunk[];
   timestamp: Date;
+  mode?: string;
+}
+
+export interface Persona {
+  username: string;
+  full_name: string;
+  role: string;
+  clearance_tags: string[];
+}
+
+export interface EvaluationScenario {
+  scenario: string;
+  attack_vector: string;
+  baseline_result: string;
+  trustrag_result: string;
+  baseline_passed: boolean;
+  trustrag_passed: boolean;
+}
+
+export interface EvaluationSummary {
+  total_scenarios: number;
+  baseline_protection_rate: number;
+  trustrag_protection_rate: number;
+  tampered_detection_rate: number;
+  prompt_injection_block_rate: number;
+  knowledge_poison_detection_rate: number;
+  unauthorized_rbac_block_rate: number;
+  latency_overhead_ms: number;
+}
+
+export interface EvaluationResponse {
+  summary: EvaluationSummary;
+  scenarios: EvaluationScenario[];
 }

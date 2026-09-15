@@ -29,6 +29,12 @@ Thumbs.db
 # ChromaDB (large binary data)
 data/chroma_db/
 
+# Enterprise Ed25519 signing keys & ingested documents (never commit)
+data/keys/
+data/trusted/
+data/provenance_log.json
+data/benchmark_corpus/
+
 # Node.js (frontend)
 node_modules/
 frontend/dist/

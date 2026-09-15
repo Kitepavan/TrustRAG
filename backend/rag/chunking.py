@@ -8,7 +8,6 @@ class Chunk:
     text: str
     document_id: str
     page_number: int
-    char_offset: int
     char_count: int
 
 
@@ -42,7 +41,6 @@ def chunk_text(
                 text=chunk_text_str,
                 document_id=document_id,
                 page_number=page_number,
-                char_offset=0,
                 char_count=len(chunk_text_str),
             ))
             chunk_idx += 1
@@ -61,7 +59,6 @@ def chunk_text(
             text=chunk_text_str,
             document_id=document_id,
             page_number=page_number,
-            char_offset=0,
             char_count=len(chunk_text_str),
         ))
 

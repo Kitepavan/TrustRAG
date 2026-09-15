@@ -3,15 +3,24 @@ import hashlib
 import uuid
 from pathlib import Path
 from datetime import datetime, timezone
+from typing import Optional
 
 import fitz  # PyMuPDF
 import docx  # python-docx
 
 from backend.rag.chunking import chunk_document
+from backend.security.hashing import compute_sha256_file
+from backend.security.signature import verify_signature
+from backend.security.trust_engine import trust_engine
+from backend.security.provenance import provenance_tracker, ProvenanceRecord
 
 
 ALLOWED_EXTENSIONS = {".pdf", ".docx", ".txt"}
 MAX_FILE_SIZE_MB = 50
+
+# Document classification levels. Must match the RBAC clearance tags in auth.py:
+# a chunk's access_level is what Defense Filter 2 enforces at retrieval time.
+ALLOWED_ACCESS_LEVELS = {"PUBLIC", "INTERNAL", "HR_CONFIDENTIAL", "IT_SEC_CONFIDENTIAL", "RESTRICTED"}
 
 
 def validate_file(file_path: str, filename: str) -> dict:
@@ -35,11 +44,7 @@ def validate_file(file_path: str, filename: str) -> dict:
 
 def calculate_sha256(file_path: str) -> str:
     """Calculate SHA-256 hash of a file."""
-    sha256 = hashlib.sha256()
-    with open(file_path, "rb") as f:
-        while chunk := f.read(8192):
-            sha256.update(chunk)
-    return sha256.hexdigest()
+    return compute_sha256_file(file_path)
 
 
 def extract_text_pdf(file_path: str) -> dict:
@@ -115,18 +120,62 @@ def extract_text(file_path: str) -> dict:
 def ingest_document(
     file_path: str,
     filename: str,
-    uploaded_by: str = "unknown",
+    uploaded_by: str = "system_admin",
+    signature_b64: Optional[str] = None,
     chunk_size: int = 512,
     chunk_overlap: int = 64,
+    access_level: str = "INTERNAL",
 ) -> dict:
-    """Full ingestion pipeline: validate → hash → extract → chunk."""
+    """
+    Full TrustRAG Ingestion Pipeline:
+    Validate → Hash → Extract Text → Verify Signature → Trust Engine Evaluation → Record Provenance → Chunk
+    """
     validation = validate_file(file_path, filename)
     if not validation["valid"]:
         return {"status": "error", "errors": validation["errors"]}
 
+    access_level = (access_level or "INTERNAL").strip().upper()
+    if access_level not in ALLOWED_ACCESS_LEVELS:
+        return {
+            "status": "error",
+            "errors": [f"Invalid access_level: {access_level}. Allowed: {sorted(ALLOWED_ACCESS_LEVELS)}"],
+        }
+
     doc_id = f"DOC-{uuid.uuid4().hex[:8].upper()}"
     sha256_hash = calculate_sha256(file_path)
+
+    # Read binary content for signature verification
+    with open(file_path, "rb") as f:
+        raw_bytes = f.read()
+
     extraction = extract_text(file_path)
+
+    is_signed = signature_b64 is not None and len(signature_b64) > 0
+    signature_valid = verify_signature(raw_bytes, signature_b64) if is_signed else False
+
+    # Trust Engine Evaluation
+    trust_eval = trust_engine.evaluate_document_trust(
+        file_bytes=raw_bytes,
+        text_content=extraction["full_text"],
+        is_signed=is_signed,
+        signature_valid=signature_valid,
+        uploader=uploaded_by,
+    )
+
+    trust_status = trust_eval["trust_category"]
+    trust_score = trust_eval["trust_score"]
+
+    # Record provenance log
+    prov_record = ProvenanceRecord(
+        document_id=doc_id,
+        filename=filename,
+        sha256_hash=sha256_hash,
+        signature_valid=signature_valid,
+        uploader=uploaded_by,
+        trust_status=trust_status,
+        notes="; ".join(trust_eval["reasons"]),
+    )
+    provenance_tracker.record_provenance(prov_record)
 
     extraction["document_id"] = doc_id
     chunks = chunk_document(extraction, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
@@ -136,8 +185,15 @@ def ingest_document(
         "document_id": doc_id,
         "filename": filename,
         "sha256": sha256_hash,
+        "is_signed": is_signed,
+        "signature_valid": signature_valid,
+        "trust_status": trust_status,
+        "trust_score": trust_score,
+        "policy_decision": trust_eval["policy_decision"],
+        "reasons": trust_eval["reasons"],
         "uploaded_by": uploaded_by,
-        "uploaded_at": datetime.now(timezone.utc).isoformat(),
+        "uploaded_at": prov_record.upload_timestamp,
+        "access_level": access_level,
         "total_pages": extraction["total_pages"],
         "total_chars": extraction["total_chars"],
         "total_chunks": len(chunks),
@@ -147,6 +203,11 @@ def ingest_document(
                 "text": c.text,
                 "page_number": c.page_number,
                 "char_count": c.char_count,
+                "sha256": sha256_hash,
+                "signature_valid": signature_valid,
+                "trust_status": trust_status,
+                "trust_score": trust_score,
+                "access_level": access_level,
             }
             for c in chunks
         ],
