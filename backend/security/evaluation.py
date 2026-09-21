@@ -1,12 +1,13 @@
 """
 TrustRAG — Stage 12 Academic Security Evaluation Engine
-Executes automated security attack benchmarks comparing Baseline RAG vs TrustRAG Framework.
+Runs four synthetic component checks comparing unfiltered-control assumptions vs TrustRAG filters.
+Not a measured end-to-end LLM attack experiment.
 """
 
 import time
 from typing import Any, Dict, List
 
-from backend.security.signature import generate_ed25519_keypair, sign_data
+from backend.security.signature import generate_ed25519_keypair, sign_data, verify_signature
 from backend.security.trust_engine import TrustEngine
 from backend.security.injection_detector import scan_for_prompt_injection
 from backend.security.poison_detector import scan_for_knowledge_poisoning
@@ -14,11 +15,11 @@ from backend.rag.secure_retrieval import apply_security_filters
 
 
 class SecurityEvaluator:
-    """Evaluates security resilience metrics across Baseline RAG vs TrustRAG."""
+    """Reports synthetic component-check pass counts for unfiltered controls vs TrustRAG."""
 
     @staticmethod
     def run_benchmark_suite() -> Dict[str, Any]:
-        start_time = time.time()
+        start_time = time.perf_counter()
         results = []
 
         priv, pub = generate_ed25519_keypair()
@@ -26,14 +27,14 @@ class SecurityEvaluator:
         # Attack Scenario 1: Cryptographic Tampering
         doc_1_content = "AUTHENTIC COMPANY POLICY 2026\nEncryption mandatory."
         doc_1_bytes = doc_1_content.encode("utf-8")
-        sign_data(doc_1_bytes, priv)  # valid signature over the ORIGINAL content
+        original_signature = sign_data(doc_1_bytes, priv)  # valid signature over the ORIGINAL content
         tampered_bytes = b"AUTHENTIC COMPANY POLICY 2026\nEncryption DISABLED."
 
         trust_eval_s1 = TrustEngine.evaluate_document_trust(
             file_bytes=tampered_bytes,
             text_content="AUTHENTIC COMPANY POLICY 2026\nEncryption DISABLED.",
             is_signed=True,
-            signature_valid=False,
+            signature_valid=verify_signature(tampered_bytes, original_signature, pub),
             uploader="attacker",
         )
         s1_blocked = trust_eval_s1["policy_decision"] == "BLOCK"
@@ -115,7 +116,7 @@ class SecurityEvaluator:
             "trustrag_passed": s4_blocked,
         })
 
-        elapsed_ms = round((time.time() - start_time) * 1000, 2)
+        elapsed_ms = round((time.perf_counter() - start_time) * 1000, 2)
 
         # Metrics are DERIVED from the scenario outcomes above, never hardcoded.
         total_scenarios = len(results)
@@ -128,6 +129,7 @@ class SecurityEvaluator:
             return 100.0 if scenario_passed else 0.0
 
         return {
+            "methodology": "Four synthetic component checks. Baseline outcomes are unfiltered-control assumptions, not measured LLM attacks. No end-to-end efficacy or latency claim.",
             "summary": {
                 "total_scenarios": total_scenarios,
                 "baseline_protection_rate": baseline_rate,
@@ -136,7 +138,7 @@ class SecurityEvaluator:
                 "prompt_injection_block_rate": _pct(results[1]["trustrag_passed"]),
                 "knowledge_poison_detection_rate": _pct(results[2]["trustrag_passed"]),
                 "unauthorized_rbac_block_rate": _pct(results[3]["trustrag_passed"]),
-                "latency_overhead_ms": elapsed_ms,
+                "suite_duration_ms": elapsed_ms,
             },
             "scenarios": results,
         }

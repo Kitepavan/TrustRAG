@@ -10,8 +10,9 @@ load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-LLM_BASE_URL = "https://api.z.ai/api/paas/v4/"
-LLM_MODEL = os.environ.get("ZAI_LLM_MODEL", "glm-4.7-flash")
+LLM_BASE_URL = "https://openrouter.ai/api/v1/"
+# OpenRouter is OpenAI-compatible; default to a free, fast chat model.
+LLM_MODEL = os.environ.get("LLM_MODEL", "nvidia/nemotron-3.5-lightning:free")
 
 SYSTEM_PROMPT = (
     "You are a helpful assistant. Answer the user's question based ONLY on the "
@@ -24,22 +25,22 @@ SYSTEM_PROMPT = (
 
 
 def _get_api_key() -> str:
-    """Resolve the Zai API key lazily so the FastAPI app can boot without it set.
+    """Resolve the OpenRouter API key lazily so the FastAPI app can boot without it set.
 
     Raising at import time took down /health and every other endpoint; failing at
     call time confines the outage to the query path (returned as HTTP 502).
     """
-    key = os.environ.get("ZAI_API_KEY", "").strip()
+    key = os.environ.get("OPENROUTER_API_KEY", "").strip()
     if not key:
         raise RuntimeError(
-            "ZAI_API_KEY environment variable is not set. "
-            "Copy .env.example to .env and set your key."
+            "OPENROUTER_API_KEY environment variable is not set. "
+            "Copy .env.example to .env and set your OpenRouter key."
         )
     return key
 
 
 def generate_answer(query: str, context_chunks: list[dict], max_retries: int = 3) -> str:
-    """Send query + context to Zai API and get an answer with exponential backoff retries."""
+    """Send query + context to OpenRouter and get an answer with bounded linear backoff retries."""
     # Context is wrapped with explicit per-source trust labels and untrusted-data
     # boundaries (see build_secure_context) — this is the security envelope the
     # system prompt refers to.
@@ -65,7 +66,6 @@ def generate_answer(query: str, context_chunks: list[dict], max_retries: int = 3
     }
 
     api_key = _get_api_key()
-    last_error = None
 
     for attempt in range(1, max_retries + 1):
         try:
@@ -76,23 +76,24 @@ def generate_answer(query: str, context_chunks: list[dict], max_retries: int = 3
                     headers={
                         "Authorization": f"Bearer {api_key}",
                         "Content-Type": "application/json",
+                        # OpenRouter attribution headers (optional, but recommended).
+                        "X-Title": "TrustRAG",
                     },
                 )
 
                 if resp.status_code == 429 and attempt < max_retries:
                     wait_time = attempt * 1.5
-                    logger.warning(f"Zai API rate limited (429). Retrying in {wait_time}s (attempt {attempt}/{max_retries})...")
+                    logger.warning(f"OpenRouter rate limited (429). Retrying in {wait_time}s (attempt {attempt}/{max_retries})...")
                     time.sleep(wait_time)
                     continue
 
                 resp.raise_for_status()
                 return resp.json()["choices"][0]["message"]["content"].strip()
         except Exception as e:
-            last_error = e
             if attempt < max_retries:
                 time.sleep(1.0 * attempt)
             else:
-                logger.error(f"Zai API call failed after {max_retries} attempts: {e}")
+                logger.error(f"OpenRouter API call failed after {max_retries} attempts: {e}")
 
     # Degraded-mode fallback: LLM unreachable, so surface the retrieved context with
     # an explicit notice rather than silently impersonating a model answer.

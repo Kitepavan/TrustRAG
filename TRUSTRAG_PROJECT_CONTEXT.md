@@ -1,3 +1,106 @@
+# TrustRAG — Current Handoff and Historical Context
+
+## Current checkpoint — September 17, 2026
+
+This section is the current handoff. Everything under **Historical archive** below is
+preserved project history: its “current”, “next”, provider, test-count and setup claims
+are superseded by this checkpoint and the linked current documents.
+
+### What has been implemented
+
+- Stages 1–11: FastAPI ingestion, sentence-aware chunking, local EmbeddingGemma-300M
+  embeddings, ChromaDB persistence, OpenRouter generation, Ed25519/SHA-256 integrity,
+  heuristic content scans, categorical trust, JWT/RBAC and secure retrieval.
+- Stage 12: four synthetic component checks. Baseline outcomes are unfiltered-control
+  assumptions, not measured end-to-end LLM attacks. Suite duration is not RAG latency overhead.
+- React 19/TypeScript/Vite/Tailwind frontend with seven routes: Dashboard, Documents,
+  Chat, Evaluation, Audit Log, Knowledge Base and Status. Sign-in is required; baseline
+  and audit access are limited to Admin/IT_Security.
+
+### Review fixes and current safeguards
+
+1. Shared `backend/security/document_store.py` verifies authoritative metadata, file
+   digests and retained signatures. Quarantine propagates to metadata, ChromaDB and
+   provenance without requiring a prior listing request.
+2. Secure retrieval fails closed on missing/invalid evidence, checks file/chunk digests,
+   rescans injection/poisoning and ranks Trusted before Suspicious. Signed poisoned
+   content is quarantined. Legacy incomplete records require re-ingestion, not auto-promotion.
+3. All sensitive APIs require JWTs. Document listing/details enforce classification;
+   uploads cannot exceed caller clearance. Baseline authorization is enforced both at
+   the API and shared retrieval function. Upload attribution comes from authentication.
+4. Credentials use environment-configured scrypt hashes; known passwords are opt-in via
+   `TRUSTRAG_DEMO_MODE=true`. JWT header/expiry validation is tightened. The frontend
+   has no embedded passwords, stores tokens in sessionStorage, and unmounts protected
+   state on logout/401. Switch accounts by signing out and back in.
+5. Public-key-only verification, keypair consistency checks, 0600 new private-key writes,
+   UUID filenames, extraction limits, locked/atomic JSON persistence and upload cleanup
+   are implemented. Corrupt JSON raises instead of silently resetting a store.
+6. Documents exposes classification and optional signature fields and displays trust
+   status. `useApi` suppresses stale results; it does not cancel requests. Old claims
+   about upload-timer cleanup or general protection for every page are not current guarantees.
+7. Query/upload audit events are stored in `data/security_audit.sqlite3`; current call
+   sites omit prompts, document contents, tokens and secrets. Query diagnostics include
+   request IDs, stage traces, durations and persistence status. `GET /audit/events`
+   requires Admin/IT_Security and supports filters/cursors. The UI displays recent
+   events but does not load older pages. This is best-effort mutable telemetry, not a
+   cryptographically tamper-evident or comprehensive access log.
+
+### Current configuration and operation
+
+- LLM provider: **OpenRouter**, default `nvidia/nemotron-3.5-lightning:free`.
+  `ZAI_API_KEY` and older Zai model references in the archive are obsolete.
+- Backend settings: `OPENROUTER_API_KEY`, `TRUSTRAG_JWT_SECRET`, `LLM_MODEL`,
+  `EMBEDDING_MODEL_PATH`, `TRUSTRAG_ALLOWED_ORIGINS`, `TRUSTRAG_DEMO_MODE`, and
+  `TRUSTRAG_PASSWORD_HASH_<USERNAME>` (uppercase username suffix).
+- Browser API setting: `VITE_API_URL` in `frontend/.env.local`; default localhost:8000.
+  There is no Vite backend proxy. Remote browsers need a reachable API URL and allowed origin.
+- Start installed development environments with `./start.sh`; default backend/frontend
+  ports are 8000/5173. See [README.md](README.md) for setup and demo credentials.
+- Missing provider key does not prevent startup. No eligible context returns 200 without
+  generation; reaching generation without a key returns 502. Retrieval failures return
+  503. Provider failures normally retry and produce a labelled context fallback.
+
+### Server recovery recorded in this session
+
+On September 17, stopped/suspended backend and Vite processes were cleared and restarted.
+Backend health, frontend HTTP 200 and employee demo login succeeded. Ctrl+Z was a possible
+cause, not confirmed. Demo mode was explicitly enabled in the private local `.env`; the
+provider key was empty at that check. Live model generation was not verified. These are
+past observations, not guaranteed current uptime. Check process state and logs before
+restarting services; resume the correct suspended job from its owning terminal where possible.
+
+### Fresh verification and remaining scope
+
+- Full suite: **68 passed, 1 warning**; warning is Starlette TestClient/httpx deprecation.
+- Frontend production build passed; lint reported zero warnings and zero errors.
+- Focused protected-endpoint authentication matrix: **20 passed**.
+- Checks used isolated runtime stores. No live OpenRouter or browser GUI acceptance was
+  performed during this documentation update. Commands/results are in [PROGRESS.md](PROGRESS.md).
+- Remaining research: broader held-out attack/content corpus, false-positive/negative
+  rates, retrieval/answer quality and measured secure-versus-baseline latency.
+- Production controls, transactional cross-store recovery, audit retention/integrity,
+  external-provider data policy and identity lifecycle remain limitations. Mutable JSON
+  provenance is not a separate authorization gate; digests assume trusted administrators.
+- Historical credential exposure is recorded below without values. Credential revocation
+  cannot be established from this checkout; do not infer rotation from history cleanup.
+- No application code, `.env`, service state or presentation binaries were changed by
+  this documentation pass. Existing work remains uncommitted; no commit was requested.
+
+### Documentation map and workflow constraints
+
+- [README.md](README.md): current setup, authentication, APIs and troubleshooting.
+- [PROGRESS.md](PROGRESS.md): completed work, test-module counts and open scope.
+- [PROJECT_REPORT.md](PROJECT_REPORT.md): academic architecture and threat-model limits.
+- [frontend/README.md](frontend/README.md): frontend routes, sessions and environment.
+- [AGENTS.md](AGENTS.md): current workspace instructions. Preserve the user's explicit
+  **do not use OpenCode/opencode-orchestrator** constraint and required verification.
+
+## Historical archive — superseded, not current setup instructions
+
+The original notes below are retained verbatim for traceability. Their numbered
+headings, including repeated numbers, belong to the historical record. Proposed
+features and old completion claims must not be presented as current results.
+
 TRUSTRAG — COMPLETE PROJECT HANDOFF CONTEXT
 1. Student/project context
 

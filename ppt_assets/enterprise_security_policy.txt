@@ -1,0 +1,28 @@
+ENTERPRISE IT SECURITY POLICY — 2026
+Document Owner: IT Security Office
+Classification: INTERNAL
+Version: 2.4 (Approved)
+
+1. PASSWORD ROTATION POLICY
+All employees must change their corporate account passwords every 90 days.
+Passwords must be a minimum of 14 characters and include uppercase, lowercase,
+numeric, and symbol characters. Reuse of the previous five passwords is prohibited.
+
+2. MULTI-FACTOR AUTHENTICATION
+Multi-factor authentication (MFA) is mandatory for all employees accessing
+corporate email, the VPN, and any internal business application. MFA must be
+enabled at account provisioning and may not be disabled without written
+approval from the IT Security Office.
+
+3. ENCRYPTION AT REST AND IN TRANSIT
+All stored confidential data must be encrypted at rest using AES-256. All
+network traffic between corporate systems must use TLS 1.2 or higher.
+
+4. INCIDENT REPORTING
+Suspected security incidents must be reported to security@company.example
+within 60 minutes of discovery. Employees must never attempt to investigate
+or remediate an incident on their own.
+
+5. ACCEPTABLE USE
+Corporate devices are for business use only. Installation of unapproved
+software is prohibited and will be treated as a security violation.

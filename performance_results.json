@@ -1,0 +1,319 @@
+{
+  "before": {
+    "workload": {
+      "documents": 1000,
+      "indexed_chunks": 150,
+      "retrieval_top_k": 50,
+      "embedding_batch": 16,
+      "llm": "stubbed; no network request"
+    },
+    "model_load": {
+      "median_ms": 2913.892,
+      "min_ms": 2913.892,
+      "runs": 1
+    },
+    "embedding_batch_16": {
+      "median_ms": 601.475,
+      "min_ms": 539.358,
+      "runs": 3
+    },
+    "embedding_query": {
+      "median_ms": 119.118,
+      "min_ms": 116.472,
+      "runs": 3
+    },
+    "metadata_write_1000": {
+      "median_ms": 18.111,
+      "min_ms": 17.324,
+      "runs": 5
+    },
+    "vector_initialize": {
+      "median_ms": 234.988,
+      "min_ms": 234.988,
+      "runs": 1
+    },
+    "vector_add_150": {
+      "median_ms": 150.447,
+      "min_ms": 150.447,
+      "runs": 1
+    },
+    "vector_search_150": {
+      "median_ms": 15.769,
+      "min_ms": 13.229,
+      "runs": 5
+    },
+    "secure_retrieval_150": {
+      "median_ms": 394.59,
+      "min_ms": 354.772,
+      "runs": 5,
+      "metadata_reads_per_call": 150.0
+    },
+    "retrieval_profile": "         44811 function calls in 0.427 seconds\n\n   Ordered by: cumulative time\n   List reduced from 130 to 18 due to restriction <18>\n\n   ncalls  tottime  percall  cumtime  percall filename:lineno(function)\n        1    0.033    0.033    0.427    0.427 /home/pavan/TrustRAG/backend/rag/secure_retrieval.py:64(secure_retrieve_chunks)\n      150    0.002    0.000    0.369    0.002 /home/pavan/TrustRAG/backend/security/document_store.py:83(verified_document)\n      150    0.001    0.000    0.316    0.002 /home/pavan/TrustRAG/backend/security/document_store.py:57(get_metadata_store)\n      150    0.001    0.000    0.316    0.002 /home/pavan/TrustRAG/backend/security/document_store.py:32(load_json)\n      150    0.001    0.000    0.308    0.002 /usr/lib/python3.12/json/__init__.py:274(load)\n      150    0.001    0.000    0.283    0.002 /usr/lib/python3.12/json/__init__.py:299(loads)\n      150    0.001    0.000    0.282    0.002 /usr/lib/python3.12/json/decoder.py:332(decode)\n      150    0.280    0.002    0.280    0.002 /usr/lib/python3.12/json/decoder.py:343(raw_decode)\n      150    0.003    0.000    0.031    0.000 /home/pavan/TrustRAG/backend/security/document_store.py:65(check_integrity)\n      150    0.015    0.000    0.024    0.000 {method 'read' of '_io.TextIOWrapper' objects}\n      300    0.001    0.000    0.018    0.000 {built-in method builtins.next}\n      300    0.002    0.000    0.017    0.000 /home/pavan/TrustRAG/backend/security/document_store.py:21(store_lock)\n      150    0.000    0.000    0.015    0.000 /usr/lib/python3.12/contextlib.py:132(__enter__)\n        1    0.000    0.000    0.013    0.013 /home/pavan/TrustRAG/backend/rag/vectorstore.py:53(query_chunks)\n        1    0.000    0.000    0.012    0.012 /home/pavan/TrustRAG/.venv/lib/python3.12/site-packages/chromadb/api/models/Collection.py:194(query)\n        1    0.001    0.001    0.012    0.012 /home/pavan/TrustRAG/.venv/lib/python3.12/site-packages/chromadb/api/rust.py:552(_query)\n      750    0.000    0.000    0.011    0.000 /usr/lib/python3.12/pathlib.py:837(stat)\n        1    0.011    0.011    0.011    0.011 {method 'query' of 'builtins.Bindings' objects}\n\n\n",
+    "ingest_68kb_unsigned": {
+      "median_ms": 25.075,
+      "min_ms": 22.639,
+      "runs": 3
+    },
+    "audit_append": {
+      "median_ms": 2.094,
+      "min_ms": 1.965,
+      "runs": 5
+    },
+    "audit_read": {
+      "median_ms": 0.519,
+      "min_ms": 0.325,
+      "runs": 5
+    },
+    "query_pipeline_stubbed_generation": {
+      "median_ms": 584.296,
+      "min_ms": 477.669,
+      "runs": 3
+    },
+    "limitations": [
+      "Synthetic unsigned short documents; not production traffic",
+      "Embeddings are real/local; vectors are reused to isolate retrieval scale",
+      "Query calls endpoint function directly; excludes HTTP and JWT decoding",
+      "Cold load measured once; warm timings use medians",
+      "External generation excluded deliberately"
+    ]
+  },
+  "after": {
+    "workload": {
+      "documents": 1000,
+      "indexed_chunks": 150,
+      "retrieval_top_k": 50,
+      "embedding_batch": 16,
+      "llm": "stubbed; no network request"
+    },
+    "model_load": {
+      "median_ms": 5261.262,
+      "min_ms": 5261.262,
+      "runs": 1
+    },
+    "embedding_batch_16": {
+      "median_ms": 1196.943,
+      "min_ms": 988.432,
+      "runs": 3
+    },
+    "embedding_query": {
+      "median_ms": 324.731,
+      "min_ms": 309.206,
+      "runs": 3
+    },
+    "metadata_write_1000": {
+      "median_ms": 42.017,
+      "min_ms": 37.842,
+      "runs": 5
+    },
+    "vector_initialize": {
+      "median_ms": 310.246,
+      "min_ms": 310.246,
+      "runs": 1
+    },
+    "vector_add_150": {
+      "median_ms": 257.727,
+      "min_ms": 257.727,
+      "runs": 1
+    },
+    "vector_search_150": {
+      "median_ms": 23.592,
+      "min_ms": 20.406,
+      "runs": 5
+    },
+    "secure_retrieval_150": {
+      "median_ms": 89.905,
+      "min_ms": 55.734,
+      "runs": 5,
+      "metadata_reads_per_call": 1.0
+    },
+    "retrieval_profile": "         34687 function calls in 0.094 seconds\n\n   Ordered by: cumulative time\n   List reduced from 132 to 18 due to restriction <18>\n\n   ncalls  tottime  percall  cumtime  percall filename:lineno(function)\n        1    0.002    0.002    0.094    0.094 /home/pavan/TrustRAG/backend/rag/secure_retrieval.py:64(secure_retrieve_chunks)\n        1    0.001    0.001    0.039    0.039 /home/pavan/TrustRAG/backend/security/document_store.py:97(verified_documents)\n      150    0.003    0.000    0.034    0.000 /home/pavan/TrustRAG/backend/security/document_store.py:65(check_integrity)\n        1    0.000    0.000    0.034    0.034 /home/pavan/TrustRAG/backend/rag/vectorstore.py:53(query_chunks)\n        1    0.001    0.001    0.028    0.028 /home/pavan/TrustRAG/.venv/lib/python3.12/site-packages/chromadb/api/models/Collection.py:194(query)\n        1    0.003    0.003    0.027    0.027 /home/pavan/TrustRAG/.venv/lib/python3.12/site-packages/chromadb/api/rust.py:552(_query)\n        1    0.024    0.024    0.024    0.024 {method 'query' of 'builtins.Bindings' objects}\n        1    0.001    0.001    0.018    0.018 /home/pavan/TrustRAG/backend/rag/secure_retrieval.py:15(apply_security_filters)\n     3300    0.003    0.000    0.013    0.000 /usr/lib/python3.12/re/__init__.py:174(search)\n      452    0.000    0.000    0.012    0.000 /usr/lib/python3.12/pathlib.py:837(stat)\n      452    0.004    0.000    0.011    0.000 {built-in method posix.stat}\n      150    0.000    0.000    0.010    0.000 /usr/lib/python3.12/pathlib.py:911(is_symlink)\n      150    0.000    0.000    0.010    0.000 /usr/lib/python3.12/pathlib.py:844(lstat)\n      150    0.001    0.000    0.009    0.000 /home/pavan/TrustRAG/backend/security/injection_detector.py:27(scan_for_prompt_injection)\n      150    0.002    0.000    0.009    0.000 /home/pavan/TrustRAG/backend/security/hashing.py:21(compute_sha256_file)\n      454    0.001    0.000    0.008    0.000 /usr/lib/python3.12/pathlib.py:447(__fspath__)\n      300    0.001    0.000    0.007    0.000 /usr/lib/python3.12/pathlib.py:407(_load_parts)\n      605    0.001    0.000    0.007    0.000 /usr/lib/python3.12/pathlib.py:437(__str__)\n\n\n",
+    "ingest_68kb_unsigned": {
+      "median_ms": 53.092,
+      "min_ms": 46.289,
+      "runs": 3
+    },
+    "audit_append": {
+      "median_ms": 3.69,
+      "min_ms": 2.748,
+      "runs": 5
+    },
+    "audit_read": {
+      "median_ms": 0.939,
+      "min_ms": 0.564,
+      "runs": 5
+    },
+    "query_pipeline_stubbed_generation": {
+      "median_ms": 274.233,
+      "min_ms": 274.054,
+      "runs": 3
+    },
+    "limitations": [
+      "Synthetic unsigned short documents; not production traffic",
+      "Embeddings are real/local; vectors are reused to isolate retrieval scale",
+      "Query calls endpoint function directly; excludes HTTP and JWT decoding",
+      "Cold load measured once; warm timings use medians",
+      "External generation excluded deliberately"
+    ]
+  },
+  "run2": {
+    "workload": {
+      "documents": 1000,
+      "indexed_chunks": 150,
+      "retrieval_top_k": 50,
+      "embedding_batch": 16,
+      "llm": "stubbed; no network request"
+    },
+    "model_load": {
+      "median_ms": 4588.512,
+      "min_ms": 4588.512,
+      "runs": 1
+    },
+    "embedding_batch_16": {
+      "median_ms": 947.065,
+      "min_ms": 877.052,
+      "runs": 3
+    },
+    "embedding_query": {
+      "median_ms": 196.586,
+      "min_ms": 167.286,
+      "runs": 3
+    },
+    "metadata_write_1000": {
+      "median_ms": 32.41,
+      "min_ms": 23.922,
+      "runs": 5
+    },
+    "vector_initialize": {
+      "median_ms": 214.225,
+      "min_ms": 214.225,
+      "runs": 1
+    },
+    "vector_add_150": {
+      "median_ms": 190.43,
+      "min_ms": 190.43,
+      "runs": 1
+    },
+    "vector_search_150": {
+      "median_ms": 29.575,
+      "min_ms": 17.06,
+      "runs": 5
+    },
+    "secure_retrieval_150": {
+      "median_ms": 51.903,
+      "min_ms": 38.299,
+      "runs": 5,
+      "metadata_reads_per_call": 1.0
+    },
+    "retrieval_profile": "         34687 function calls in 0.080 seconds\n\n   Ordered by: cumulative time\n   List reduced from 132 to 18 due to restriction <18>\n\n   ncalls  tottime  percall  cumtime  percall filename:lineno(function)\n        1    0.001    0.001    0.080    0.080 /home/pavan/TrustRAG/backend/rag/secure_retrieval.py:64(secure_retrieve_chunks)\n        1    0.000    0.000    0.028    0.028 /home/pavan/TrustRAG/backend/rag/vectorstore.py:53(query_chunks)\n        1    0.001    0.001    0.026    0.026 /home/pavan/TrustRAG/backend/security/document_store.py:97(verified_documents)\n        1    0.001    0.001    0.023    0.023 /home/pavan/TrustRAG/backend/rag/secure_retrieval.py:15(apply_security_filters)\n      150    0.002    0.000    0.022    0.000 /home/pavan/TrustRAG/backend/security/document_store.py:65(check_integrity)\n        1    0.000    0.000    0.018    0.018 /home/pavan/TrustRAG/.venv/lib/python3.12/site-packages/chromadb/api/models/Collection.py:194(query)\n        1    0.001    0.001    0.017    0.017 /home/pavan/TrustRAG/.venv/lib/python3.12/site-packages/chromadb/api/rust.py:552(_query)\n     3300    0.003    0.000    0.017    0.000 /usr/lib/python3.12/re/__init__.py:174(search)\n        1    0.016    0.016    0.016    0.016 {method 'query' of 'builtins.Bindings' objects}\n      150    0.002    0.000    0.012    0.000 /home/pavan/TrustRAG/backend/security/injection_detector.py:27(scan_for_prompt_injection)\n        1    0.000    0.000    0.009    0.009 /home/pavan/TrustRAG/.venv/lib/python3.12/site-packages/chromadb/api/models/Collection.py:43(count)\n        1    0.000    0.000    0.009    0.009 /home/pavan/TrustRAG/.venv/lib/python3.12/site-packages/chromadb/api/rust.py:389(_count)\n        1    0.009    0.009    0.009    0.009 {method 'count' of 'builtins.Bindings' objects}\n     3300    0.008    0.000    0.008    0.000 {method 'search' of 're.Pattern' objects}\n      150    0.001    0.000    0.008    0.000 /home/pavan/TrustRAG/backend/security/poison_detector.py:29(scan_for_knowledge_poisoning)\n      452    0.000    0.000    0.007    0.000 /usr/lib/python3.12/pathlib.py:837(stat)\n      452    0.002    0.000    0.007    0.000 {built-in method posix.stat}\n      150    0.001    0.000    0.007    0.000 /home/pavan/TrustRAG/backend/security/hashing.py:21(compute_sha256_file)\n\n\n",
+    "ingest_68kb_unsigned": {
+      "median_ms": 32.078,
+      "min_ms": 27.023,
+      "runs": 3
+    },
+    "audit_append": {
+      "median_ms": 3.009,
+      "min_ms": 2.571,
+      "runs": 5
+    },
+    "audit_read": {
+      "median_ms": 0.473,
+      "min_ms": 0.345,
+      "runs": 5
+    },
+    "query_pipeline_stubbed_generation": {
+      "median_ms": 259.851,
+      "min_ms": 236.959,
+      "runs": 3
+    },
+    "limitations": [
+      "Synthetic unsigned short documents; not production traffic",
+      "Embeddings are real/local; vectors are reused to isolate retrieval scale",
+      "Query calls endpoint function directly; excludes HTTP and JWT decoding",
+      "Cold load measured once; warm timings use medians",
+      "External generation excluded deliberately"
+    ]
+  },
+  "final": {
+    "workload": {
+      "documents": 1000,
+      "indexed_chunks": 150,
+      "retrieval_top_k": 50,
+      "embedding_batch": 16,
+      "llm": "stubbed; no network request"
+    },
+    "model_load": {
+      "median_ms": 2460.097,
+      "min_ms": 2460.097,
+      "runs": 1
+    },
+    "embedding_batch_16": {
+      "median_ms": 684.886,
+      "min_ms": 621.718,
+      "runs": 3
+    },
+    "embedding_query": {
+      "median_ms": 122.312,
+      "min_ms": 103.527,
+      "runs": 3
+    },
+    "metadata_write_1000": {
+      "median_ms": 30.261,
+      "min_ms": 20.089,
+      "runs": 5
+    },
+    "vector_initialize": {
+      "median_ms": 140.312,
+      "min_ms": 140.312,
+      "runs": 1
+    },
+    "vector_add_150": {
+      "median_ms": 100.37,
+      "min_ms": 100.37,
+      "runs": 1
+    },
+    "vector_search_150": {
+      "median_ms": 15.07,
+      "min_ms": 14.172,
+      "runs": 5
+    },
+    "secure_retrieval_150": {
+      "median_ms": 32.809,
+      "min_ms": 31.62,
+      "runs": 5,
+      "metadata_reads_per_call": 1.0
+    },
+    "document_listing_1000": {
+      "median_ms": 56.062,
+      "min_ms": 52.974,
+      "runs": 3
+    },
+    "retrieval_profile": "         34687 function calls in 0.044 seconds\n\n   Ordered by: cumulative time\n   List reduced from 132 to 18 due to restriction <18>\n\n   ncalls  tottime  percall  cumtime  percall filename:lineno(function)\n        1    0.001    0.001    0.044    0.044 /home/pavan/TrustRAG/backend/rag/secure_retrieval.py:64(secure_retrieve_chunks)\n        1    0.000    0.000    0.017    0.017 /home/pavan/TrustRAG/backend/security/document_store.py:97(verified_documents)\n      150    0.001    0.000    0.014    0.000 /home/pavan/TrustRAG/backend/security/document_store.py:65(check_integrity)\n        1    0.000    0.000    0.013    0.013 /home/pavan/TrustRAG/backend/rag/vectorstore.py:53(query_chunks)\n        1    0.000    0.000    0.012    0.012 /home/pavan/TrustRAG/.venv/lib/python3.12/site-packages/chromadb/api/models/Collection.py:194(query)\n        1    0.001    0.001    0.012    0.012 /home/pavan/TrustRAG/.venv/lib/python3.12/site-packages/chromadb/api/rust.py:552(_query)\n        1    0.011    0.011    0.011    0.011 {method 'query' of 'builtins.Bindings' objects}\n        1    0.001    0.001    0.011    0.011 /home/pavan/TrustRAG/backend/rag/secure_retrieval.py:15(apply_security_filters)\n     3300    0.002    0.000    0.008    0.000 /usr/lib/python3.12/re/__init__.py:174(search)\n      150    0.001    0.000    0.005    0.000 /home/pavan/TrustRAG/backend/security/injection_detector.py:27(scan_for_prompt_injection)\n      452    0.000    0.000    0.005    0.000 /usr/lib/python3.12/pathlib.py:837(stat)\n      452    0.002    0.000    0.005    0.000 {built-in method posix.stat}\n      150    0.000    0.000    0.004    0.000 /usr/lib/python3.12/pathlib.py:911(is_symlink)\n     3300    0.004    0.000    0.004    0.000 {method 'search' of 're.Pattern' objects}\n      150    0.000    0.000    0.004    0.000 /usr/lib/python3.12/pathlib.py:844(lstat)\n      150    0.000    0.000    0.004    0.000 /home/pavan/TrustRAG/backend/security/poison_detector.py:29(scan_for_knowledge_poisoning)\n      150    0.001    0.000    0.004    0.000 /home/pavan/TrustRAG/backend/security/hashing.py:21(compute_sha256_file)\n      454    0.000    0.000    0.003    0.000 /usr/lib/python3.12/pathlib.py:447(__fspath__)\n\n\n",
+    "ingest_68kb_unsigned": {
+      "median_ms": 29.276,
+      "min_ms": 26.347,
+      "runs": 3
+    },
+    "audit_append": {
+      "median_ms": 2.377,
+      "min_ms": 2.077,
+      "runs": 5
+    },
+    "audit_read": {
+      "median_ms": 0.247,
+      "min_ms": 0.223,
+      "runs": 5
+    },
+    "query_pipeline_stubbed_generation": {
+      "median_ms": 151.513,
+      "min_ms": 142.557,
+      "runs": 3
+    },
+    "limitations": [
+      "Synthetic unsigned short documents; not production traffic",
+      "Embeddings are real/local; vectors are reused to isolate retrieval scale",
+      "Query calls endpoint function directly; excludes HTTP and JWT decoding",
+      "Cold load measured once; warm timings use medians",
+      "External generation excluded deliberately"
+    ]
+  }
+}

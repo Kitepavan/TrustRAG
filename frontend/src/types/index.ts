@@ -6,6 +6,8 @@ export interface DashboardStats {
   vector_db_status: string;
   embedding_model: string;
   llm_model: string;
+  llm_provider?: string;
+  llm_status?: string;
   rag_status: string;
 }
 
@@ -33,6 +35,9 @@ export interface SystemStatus {
 export interface DocumentInfo {
   filename: string;
   size_bytes: number;
+  access_level?: string;
+  integrity_ok?: boolean;
+  integrity_note?: string;
   document_id?: string;
   sha256?: string;
   is_signed?: boolean;
@@ -75,7 +80,37 @@ export interface SourceChunk {
   text_preview: string;
 }
 
-export interface QueryResponse {
+export interface PipelineStep {
+  stage: string;
+  status: 'info' | 'passed' | 'blocked' | 'warning' | 'error';
+  message: string;
+  count?: number;
+}
+
+export interface QueryTelemetry {
+  pipeline_log?: PipelineStep[];
+  request_id?: string;
+  duration_ms?: number;
+  audit_recorded?: boolean;
+}
+
+export interface AuditEvent {
+  sequence: number;
+  id: string;
+  timestamp: string;
+  actor: string;
+  event_type: string;
+  severity: 'info' | 'warning' | 'error';
+  request_id: string;
+  details: Record<string, unknown> & QueryTelemetry;
+}
+
+export interface AuditResponse {
+  events: AuditEvent[];
+  next_cursor: number | null;
+}
+
+export interface QueryResponse extends QueryTelemetry {
   answer: string;
   sources: SourceChunk[];
   mode?: string;
@@ -89,6 +124,9 @@ export interface ChatMessage {
   sources?: SourceChunk[];
   timestamp: Date;
   mode?: string;
+  pipeline_log?: PipelineStep[];
+  request_id?: string;
+  duration_ms?: number;
 }
 
 export interface Persona {
@@ -115,7 +153,7 @@ export interface EvaluationSummary {
   prompt_injection_block_rate: number;
   knowledge_poison_detection_rate: number;
   unauthorized_rbac_block_rate: number;
-  latency_overhead_ms: number;
+  suite_duration_ms: number;
 }
 
 export interface EvaluationResponse {

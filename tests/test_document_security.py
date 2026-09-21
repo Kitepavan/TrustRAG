@@ -69,6 +69,33 @@ def test_provenance_tracking():
         assert loaded.uploader == "alice_admin"
 
 
+@pytest.mark.parametrize("signed", [False, True])
+def test_ingestion_reads_binary_content_only_for_signatures(tmp_path, monkeypatch, signed):
+    import builtins
+    from backend.rag import ingestion
+
+    content = b"Enterprise guidelines: all servers must use MFA."
+    path = tmp_path / "guidelines.txt"
+    path.write_bytes(content)
+    private_key, _ = ensure_enterprise_keys()
+    signature = sign_data(content, private_key) if signed else None
+    binary_reads = []
+
+    def tracked_open(file, mode="r", *args, **kwargs):
+        if mode == "rb":
+            binary_reads.append(file)
+        return builtins.open(file, mode, *args, **kwargs)
+
+    monkeypatch.setattr(ingestion, "open", tracked_open, raising=False)
+    result = ingestion.ingest_document(str(path), path.name, signature_b64=signature)
+
+    assert len(binary_reads) == int(signed)
+    assert result["sha256"] == compute_sha256_bytes(content)
+    assert result["signature_valid"] is signed
+    assert result["trust_status"] == ("Trusted" if signed else "Suspicious")
+    assert result["chunks"]
+
+
 def test_ingestion_security_flow():
     priv, pub = ensure_enterprise_keys()
 

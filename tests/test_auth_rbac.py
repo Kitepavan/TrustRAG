@@ -44,3 +44,23 @@ def test_rbac_permission_checks():
 
     # HR Specialist checking HR confidential doc
     assert check_rbac_permission(hr_tags, "HR_CONFIDENTIAL") is True
+
+
+def test_demo_passwords_disabled_without_demo_mode(monkeypatch):
+    # Fixed demo passwords are dead outside TRUSTRAG_DEMO_MODE (default false).
+    monkeypatch.delenv("TRUSTRAG_DEMO_MODE", raising=False)
+    monkeypatch.delenv("TRUSTRAG_PASSWORD_HASH_HR_USER", raising=False)
+    assert authenticate_user("hr_user", "hr123") is None
+
+    monkeypatch.setenv("TRUSTRAG_DEMO_MODE", "true")
+    assert authenticate_user("hr_user", "hr123") is not None
+
+    # Hash-configured credentials work without demo mode.
+    import hashlib
+    import secrets
+    salt = secrets.token_bytes(16)
+    digest = hashlib.scrypt(b"S3cure!", salt=salt, n=16384, r=8, p=1).hex()
+    monkeypatch.delenv("TRUSTRAG_DEMO_MODE", raising=False)
+    monkeypatch.setenv("TRUSTRAG_PASSWORD_HASH_HR_USER", f"{salt.hex()}:{digest}")
+    assert authenticate_user("hr_user", "S3cure!") is not None
+    assert authenticate_user("hr_user", "hr123") is None

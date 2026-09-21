@@ -141,16 +141,21 @@ def ingest_document(
             "errors": [f"Invalid access_level: {access_level}. Allowed: {sorted(ALLOWED_ACCESS_LEVELS)}"],
         }
 
-    doc_id = f"DOC-{uuid.uuid4().hex[:8].upper()}"
+    doc_id = f"DOC-{uuid.uuid4().hex.upper()}"
     sha256_hash = calculate_sha256(file_path)
 
+    is_signed = signature_b64 is not None and len(signature_b64) > 0
+    raw_bytes = b""
     # Read binary content for signature verification
-    with open(file_path, "rb") as f:
-        raw_bytes = f.read()
+    if is_signed:
+        with open(file_path, "rb") as f:
+            raw_bytes = f.read()
 
     extraction = extract_text(file_path)
 
-    is_signed = signature_b64 is not None and len(signature_b64) > 0
+    if extraction["total_chars"] > 2_000_000:
+        return {"status": "error", "errors": ["Extracted text exceeds 2 million characters"]}
+
     signature_valid = verify_signature(raw_bytes, signature_b64) if is_signed else False
 
     # Trust Engine Evaluation
@@ -200,6 +205,7 @@ def ingest_document(
         "chunks": [
             {
                 "chunk_id": c.chunk_id,
+                "document_id": doc_id,
                 "text": c.text,
                 "page_number": c.page_number,
                 "char_count": c.char_count,

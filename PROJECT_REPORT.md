@@ -1,333 +1,97 @@
 # TrustRAG — Project Report
 
-## Secure Retrieval-Augmented Generation Framework for Defending Enterprise AI Systems Against Knowledge Poisoning
+## Secure Retrieval-Augmented Generation
 
-**Project type:** Academic Information Security project (engineering)
-**Current status:** Stages 1–6 complete (baseline RAG + web frontend) · Stages 7–12 pending (security layers)
-**Git tag:** `baseline-rag-v1`
+**Status (September 17, 2026):** Stages 1–11 are implemented as an academic prototype. Stage 12 provides synthetic component checks, not a completed empirical evaluation of end-to-end LLM security.
 
----
+## Motivation
 
-## 1. What Is This Project?
+The most semantically relevant document is not necessarily the safest document. TrustRAG combines document integrity, categorical trust policy, content scanning and role-based authorization before supplying retrieved information to a language model. It uses existing pretrained models rather than training an LLM.
 
-TrustRAG is a **security-enhanced Retrieval-Augmented Generation (RAG) framework**. It lets an organization connect a Large Language Model (LLM) to its own documents — but, unlike a normal RAG system, it does **not** blindly trust everything it retrieves.
+## Architecture and implemented stages
 
-The project is driven by one central security question:
+1. **Backend:** Python 3.12, FastAPI and Uvicorn, with configurable CORS.
+2. **Ingestion:** PDF, DOCX and TXT extraction; 50 MB copied-file cap; server-generated UUID filenames. Multipart parsing happens before the copy cap, so deployments need a request-body limit. Extracted text is capped at two million characters after extraction.
+3. **Chunking:** Sentence-aware chunks targeting 512 characters with 64-character overlap. A long sentence can exceed the target; these are not token limits.
+4. **Embedding:** Local EmbeddingGemma-300M through SentenceTransformers, 768 dimensions.
+5. **Storage:** ChromaDB cosine similarity with document identity, file and chunk digests, classification and trust metadata.
+6. **Generation and UI:** OpenRouter (default `nvidia/nemotron-3.5-lightning:free`), React 19, strict TypeScript, Vite and Tailwind. Seven pages: Dashboard, Documents, Chat, Evaluation, Audit Log, Knowledge Base and Status.
+7. **Document security:** SHA-256, Ed25519 signatures and mutable JSON provenance records. Verification requires only the public key; signatures are retained with new document metadata. Key generation refuses incomplete or mismatched existing pairs.
+8. **Content security:** Case-insensitive regex injection and poisoning detectors, at ingestion and retrieval. These are demonstration heuristics, not semantic classifiers or guarantees against adversarial content.
+9. **Trust:** Signed and clean is Trusted; unsigned and clean is Suspicious; invalid signatures or positive injection/poisoning scans are Quarantined, including signed poisoned content. Fixed scores are policy constants, not calibrated probabilities.
+10. **Authentication:** HS256 JWTs, four fixed role profiles, environment-configured scrypt password hashes. Known demo passwords work only with explicit `TRUSTRAG_DEMO_MODE=true`. The browser contains no embedded passwords and requires sign-in.
+11. **Secure retrieval:** Oversample candidates, verify authoritative document records and current file integrity (including signatures for signed documents), enforce classification and trust, check chunk digests, rescan content, rank Trusted before Suspicious and then by distance. Missing evidence fails closed. Quarantine is persisted in metadata and propagated to ChromaDB and provenance. Baseline remains intentionally unfiltered and restricted to Admin/IT_Security at both API and shared retrieval layers.
+12. **Evaluation:** Four synthetic component scenarios, with actual Ed25519 verification in the tamper case and real RBAC filtering in the authorization case. Baseline outcomes represent unfiltered-control assumptions. Percentages describe these fixed cases only. `suite_duration_ms` measures check runtime, not RAG latency overhead.
 
-> **How can a RAG system ensure that information retrieved by an LLM is authentic, trusted, authorized, traceable, and protected against knowledge poisoning and prompt injection?**
+## Authorization and session lifecycle
 
-We are **not** building or training an LLM from scratch. We use existing pretrained models and focus our contribution on the **secure RAG architecture** and the **security mechanisms** wrapped around it.
+Dashboard, status, evaluation, document APIs, query and `/auth/me` require valid authentication. Invalid or expired credentials return 401. Document listings/details respect classification, and uploads cannot select a classification outside the uploader's clearance. Health and login remain public. `/audit/events` additionally requires Admin/IT_Security.
 
----
+The UI waits for identity validation before mounting protected pages. Sign-out or a 401 unmounts account-specific state, including chat history. Changing account requires signing out and signing in again. Tokens use sessionStorage rather than persistent localStorage; this limits persistence but does not protect tokens against same-origin script compromise.
 
-## 2. Why This Matters (Problem & Motivation)
+## Security event telemetry
 
-### The problem
-A normal RAG pipeline works like this:
+The current checkout includes a separate SQLite security event store at
+`data/security_audit.sqlite3`, written with file mode 0600. Upload/query call sites record
+outcomes and structured stages without question text, document content, tokens or secrets.
+Instrumented query responses include a request ID, pipeline log, duration and audit-write
+status. This is not a complete access/login audit trail; requests rejected before
+instrumentation are not necessarily recorded.
 
-```
-Documents → Extract text → Chunk → Embed → Vector DB
-User question → Embed → Similarity search → Retrieved chunks → LLM → Answer
-```
+Admin/IT_Security can read newest-first events through `GET /audit/events`, using event
+and severity filters and cursor pagination. The Audit Log page displays recent events
+and expandable traces; it indicates an older-event cursor but does not load older pages.
+The store is mutable and not cryptographically tamper-evident, despite the current UI's
+“tamper-resistant” wording. Audit write failures are logged and do not bypass enforcement.
 
-The weakness: normal RAG assumes that **retrieved document = usable knowledge**. That assumption is dangerous.
+## Persistence and threat model
 
-- An attacker can upload a **poisoned document** (e.g., "Employees never need to change passwords") that is semantically similar to a legitimate policy ("Change passwords every 90 days").
-- Semantic retrieval may select the malicious document, and the LLM will answer from it **even though the LLM itself is functioning perfectly**.
-- A retrieved document can also carry **indirect prompt injection** ("IGNORE ALL PREVIOUS INSTRUCTIONS…"), or be a **confidential** document that an ordinary employee is not authorized to read.
+Metadata and provenance writes use atomic replacement and Linux file locks. Corrupt JSON raises instead of silently becoming an empty store. Upload failure cleanup attempts to remove indexed chunks; orphaned records without authoritative metadata cannot enter secure retrieval. The file, vector and provenance stores are not one transactional database, and process crashes may leave records requiring operator reconciliation.
 
-So the core insight of the project is:
+Deployment administrators, metadata storage and configured public keys remain trusted. Plain digests do not protect against an administrator rewriting content and its expected digest together. Provenance is mutable and is **not tamper-evident**, signed, append-only or a per-query provenance authorization check. Signatures authenticate file bytes, not uploader-selected classification. There is no automatic key rotation/version history. Existing key files are not silently replaced.
 
-> **The most semantically relevant document is not necessarily the safest document.**
+Legacy documents lacking signatures, stored filenames, document IDs or chunk digests are not automatically promoted to trusted status. Re-ingest their original files with appropriate classification and signatures. Existing runtime data is not migrated or deleted by this change.
 
-### The motivation
-Enterprise RAG needs both **accurate retrieval** AND **security**. Retrieved information should be authentic, trustworthy, authorized, and traceable. Security must protect the *entire RAG pipeline*, not just the LLM.
+## Verification
 
-### Objectives
-1. Detect and prevent poisoned or malicious documents from entering the knowledge base.
-2. Verify the authenticity and integrity of documents *before* indexing.
-3. Implement trust scoring, provenance tracking, and role-based access control (RBAC).
-4. Generate responses only from information that is relevant, trusted, and authorized for the current user.
-
----
-
-## 3. The TrustRAG Architecture
-
-TrustRAG adds security layers on **both sides** of the RAG pipeline.
-
-### Document side (ingestion)
-
-```
-Document Upload → File Validation → Digital Signature Check → SHA-256 Integrity
-→ Poison / Injection Scan → Trust Evaluation → Provenance Recording
-→ Chunking → Embedding Model → Vector Database
-```
-
-### Query side (retrieval)
-
-```
-User → Authentication → RBAC → Query → Query Embedding → Vector Retrieval
-→ Trust Filtering → Provenance Validation → Prompt-Injection Check
-→ Secure Context → LLM → Trusted Response → Audit Logging
-```
-
-### The design principle
-
-A normal RAG ranks information mostly by relevance. TrustRAG's retrieval decision is closer to:
-
-```
-Retrieval decision = Semantic relevance + Trust + Authorization + Provenance + Security status
-```
-
-- `malicious_policy.pdf` — Similarity 0.97, Trust LOW, Poisoned YES → **BLOCK**
-- `security_policy.pdf` — Similarity 0.93, Trust HIGH, Authorized YES, Provenance VERIFIED → **USE**
-
-### Key security concepts we rely on
-- **SHA-256** — a fingerprint of a file; proves content is unchanged relative to a known value (not who signed it).
-- **Digital signatures** — prove the content was signed by a trusted key; an attacker cannot forge a signature without the private key.
-- **Trust ≠ Authorization** — a genuine, trusted document may still be unauthorized for a given user (RBAC).
-- **Valid signature ≠ safe content** — signature, integrity, provenance, content security, and authorization are separate layers.
-- **Defense in depth** — a malicious document is stopped at every possible point: ingestion scan, vector store, retrieval-time scan, and before the LLM.
-
----
-
-## 4. Tech Stack
-
-| Component | Technology |
-|-----------|-----------|
-| Backend | Python 3.12, FastAPI, Uvicorn |
-| Text extraction | PyMuPDF (PDF), python-docx (DOCX), native (TXT) |
-| Embedding model | Google EmbeddingGemma-300M (local, 768-dim) |
-| Vector database | ChromaDB (cosine similarity) |
-| LLM | Zai API — `glm-4.7-flash` |
-| Frontend | React 18 + TypeScript (strict) + Vite + Tailwind CSS v4 |
-| Frontend design | Cyber-Metric Enterprise Security dark theme (Material-based tokens) |
-| Secrets | `.env` / python-dotenv (`ZAI_API_KEY`, `EMBEDDING_MODEL_PATH`) |
-
----
-
-## 5. What We Have Done (Completed So Far)
-
-### Roadmap — Stage-by-stage (Stages 1–6 = baseline RAG)
-
-**Stage 1 — Project & backend setup ✅**
-- FastAPI app at `backend/main.py`, CORS, virtual environment, directory structure (`backend/{api,rag,security,database,models}`, `data/...`, `tests/`, `scripts/`).
-- `./start.sh` launches both backend and frontend.
-
-**Stage 2 — Document ingestion ✅**
-- `backend/rag/ingestion.py`: file-type validation (PDF/DOCX/TXT), size cap (50 MB), readability check, SHA-256 hashing, and text extraction via PyMuPDF / python-docx / native TXT.
-- `backend/api/documents.py`: `POST /documents/upload`.
-- Files are stored under server-generated `{document_id}{suffix}` names (path-traversal-safe).
-
-**Stage 3 — Text chunking ✅**
-- `backend/rag/chunking.py`: sentence-aware chunker, 512 chars per chunk with 64-char overlap.
-- Each chunk gets a unique id: `{doc_id}_p{page}_c{index}`.
-
-**Stage 4 — Embedding generation ✅**
-- `backend/rag/embedding.py`: EmbeddingGemma-300M via sentence-transformers, 768-dim vectors, runs locally on CPU (~0.5s per query).
-
-**Stage 5 — Vector database ✅**
-- `backend/rag/vectorstore.py`: ChromaDB persistent store (`data/chroma_db/`), cosine similarity, metadata stored alongside each chunk (document_id, page_number, char_count).
-
-**Stage 6 — Basic RAG ✅**
-- `backend/rag/llm.py`: Zai API (`glm-4.7-flash`) integration with a security-aware system prompt (context wrapped in `<context>` tags and declared UNTRUSTED DATA).
-- `backend/api/query.py`: `POST /query` — full pipeline: embed → search → LLM → answer + sources.
-
-### Web frontend ✅ (added after baseline RAG)
-- React 18 + TypeScript strict + Vite + Tailwind v4, with a fully dark "enterprise security dashboard" design system.
-- **5 pages:** Dashboard, Documents, RAG Chat, Knowledge Base, System Status.
-- **Key features:**
-  - Drag-and-drop, keyboard-accessible file upload.
-  - Real source citations in Chat (no fabricated mock data), copy-to-clipboard.
-  - Client-side pagination + search filter in Documents.
-  - Real-time stats & system health from the backend (`/dashboard/stats`, `/status`).
-  - Dynamic backend health status in the sidebar.
-  - Mobile-responsive off-canvas sidebar, shared PageHeader component, accessibility (aria-labels, heading hierarchy, keyboard navigation).
-  - All colors centralized as Tailwind `@theme` tokens (zero hardcoded hex in TSX).
-
-### Backend API endpoints (current)
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/` | Project info |
-| GET | `/health` | Health check |
-| GET | `/dashboard/stats` | Dashboard statistics |
-| GET | `/status` | System component health |
-| POST | `/documents/upload` | Upload + ingest a document |
-| GET | `/documents/` | List indexed documents (with metadata) |
-| GET | `/documents/{id}` | Single-document metadata |
-| POST | `/query` | Query the RAG pipeline |
-
-### Security hardening pass ✅ (code review + quick wins)
-- **Critical fixes:** Zai API key removed from source (now in `.env`); path-traversal upload fixed; LLM failures no longer leak internals (HTTP 502 + server logs); baseline prompt-injection mitigation (context marked as untrusted data).
-- **Robustness:** configurable embedding model path, DOCX extraction implemented, graceful degradation when ChromaDB is down, UTC timestamps, thread-safe metadata store.
-- **Tooling:** `opencode.json`, `code-reviewer` subagent, TypeScript strict mode, clean lint/build.
-- **Verified:** `npm run lint` clean, `npm run build` passes, backend endpoints tested via TestClient, DOCX ingestion + path traversal regression-tested.
-
-### What is currently loaded in the system
-- `test_policy.pdf` (1 page, 1 chunk)
-- `NIST.SP.800-160v1r1.pdf` (195 pages, 525,440 chars, 1,419 chunks)
-
----
-
-## 6. What We Are Going To Do (Stages 7–12)
-
-These are the security layers that transform the baseline RAG into TrustRAG:
-
-| Stage | What it is | Purpose |
-|-------|-----------|---------|
-| **7 — Document security** | SHA-256 integrity, digital signatures, provenance tracking, versioning | Verify documents are authentic and unchanged before indexing |
-| **8 — Content security** | Knowledge-poisoning detection, prompt-injection detection | Detect malicious content at ingestion and again at retrieval |
-| **9 — Trust engine** | Combine signature, integrity, source, provenance, poison/injection risk into a trust score/category | Decide whether a document is Trusted / Suspicious / Quarantined |
-| **10 — Authentication + RBAC** | Login, roles (Employee/HR/IT Security/Admin), per-document permissions | Prevent unauthorized retrieval of confidential documents |
-| **11 — Secure retrieval** | Security-aware ranking: relevance + trust + authorization + provenance + injection scan | Only safe, authorized context reaches the LLM |
-| **12 — Evaluation** | Compare baseline RAG vs TrustRAG under attacks | Measure security effectiveness, retrieval quality, and overhead |
-
----
-
-## 7. How We Will Implement It (Implementation Plan)
-
-The strategy is deliberate: **keep the baseline RAG intact and working**, add each security mechanism **modularly** as its own stage, and **test each one before moving on** — so we can run controlled experiments later (baseline vs. secured).
-
-### Stage 7 — Document security
-- Add `backend/security/` modules: `hashing.py`, `signature.py`, `provenance.py`.
-- Pick a signature algorithm (**open decision** — candidates: Ed25519 / RSA-PSS / ECDSA; Ed25519 is likely simplest for an academic prototype).
-- Extend the upload flow: `Upload → Validate → Hash → Verify signature → Extract → Scan → Trust evaluate → Record provenance → Chunk → Embed → Store`.
-- Store per-document: source, uploader, timestamp, version, hash, signer, security status.
-- Test cases we will build:
-  - **A:** unchanged signed document → ACCEPT
-  - **B:** document changed after signing → SIGNATURE FAIL / QUARANTINE
-  - **C:** legitimate new version, newly signed → ACCEPT as new version
-  - **D:** attacker PDF with its own hash but no trusted signature → UNTRUSTED / QUARANTINE
-
-### Stage 8 — Content security
-- Implement **poison detection** using multiple signals (source confidence, signature status, contradiction/anomaly vs. trusted corpus).
-- Implement **prompt-injection detection** as a layered defense:
-  1. Rule/pattern detector (e.g., "ignore previous instructions", "reveal system prompt").
-  2. A dedicated security classifier (NVIDIA guard model is a candidate — **open decision**, to be evaluated for availability, license, hardware, latency, quality).
-  3. **Retrieval-time second scan** (defense in depth).
-- We may structure this as an experiment: Detector A (rules only) vs B (AI model) vs C (combined), measuring true positives / false positives / false negatives / detection rate / latency.
-
-### Stage 9 — Trust engine
-- Build `trust_engine.py` that combines: signature status, integrity status, source reputation, provenance, poison risk, injection risk, version status.
-- Output: **Trusted / Suspicious / Quarantined** (and optionally a numeric score).
-- ⚠️ The exact formula and thresholds are an **open research/design problem** — we will design and justify them experimentally, not invent arbitrary weights.
-
-### Stage 10 — Authentication + RBAC
-- Add login (username/password → JWT/session) with FastAPI.
-- Define roles: Employee, HR, IT Security, Admin.
-- Attach an access policy to each document.
-- Enforce: a document can be trusted and relevant but still **BLOCKED** for an unauthorized user.
-
-### Stage 11 — Secure retrieval
-- Replace plain `top-k similarity` with security-aware retrieval:
-  `Relevant AND Authorized AND Trusted enough AND Security checks passed` → only then does a chunk become LLM context.
-- Re-scan retrieved chunks for prompt injection before building the final context.
-
-### Stage 12 — Evaluation (the academic core)
-- Build the **TrustRAG Enterprise Security Corpus** (public + synthetic enterprise documents — employee handbooks, IT/security policies, SOPs, etc., ~200–300 planned pages).
-- Create controlled malicious copies of trusted documents (e.g., "MFA is mandatory" vs poisoned "MFA is unnecessary") so ground truth is known.
-- Run scenarios:
-  1. Knowledge poisoning — do malicious docs influence answers?
-  2. Prompt injection — do injected instructions get followed?
-  3. Unauthorized retrieval — can an employee read HR-confidential data?
-  4. Document tampering — does modifying a signed doc get caught?
-  5. Legitimate version update — is a correctly signed new version accepted?
-  6. Retrieval quality — does security filtering damage useful retrieval?
-  7. Performance — how much latency/overhead does security add?
-- Metrics: poison detection rate, injection detection rate, false positives/negatives, unauthorized-retrieval prevention, retrieval accuracy, answer quality, latency.
-
----
-
-## 8. Project Structure
-
-```
-TrustRAG/
-├── backend/
-│   ├── main.py                 # FastAPI app, CORS, routers
-│   ├── api/
-│   │   ├── documents.py        # Upload, list, metadata
-│   │   ├── query.py            # RAG query
-│   │   └── dashboard.py        # Stats + system status
-│   ├── rag/
-│   │   ├── ingestion.py        # Validation, SHA-256, extraction
-│   │   ├── chunking.py         # Sentence-aware chunking
-│   │   ├── embedding.py        # EmbeddingGemma-300M
-│   │   ├── vectorstore.py      # ChromaDB
-│   │   └── llm.py              # Zai API (glm-4.7-flash)
-│   ├── security/               # (empty — Stage 7+)
-│   ├── database/               # (empty — future)
-│   └── models/                 # (empty — future)
-├── frontend/
-│   └── src/
-│       ├── pages/              # Dashboard, Documents, Chat, KnowledgeBase, SystemStatus
-│       ├── components/         # Layout, Sidebar, PageHeader, StatusBadge, FileUpload
-│       ├── services/api.ts     # API client
-│       ├── hooks/useApi.ts     # Data-fetching hook
-│       └── types/index.ts      # TS interfaces
-├── data/
-│   ├── trusted/                # Uploaded documents + _metadata.json
-│   ├── chroma_db/              # Vector store (gitignored)
-│   ├── poisoned/               # (empty — Stage 8+)
-│   └── restricted/             # (empty — future)
-├── tests/                      # (pytest suite to be added)
-├── scripts/
-├── start.sh                    # Dev launcher
-├── requirements.txt
-└── README.md / TRUSTRAG_PROJECT_CONTEXT.md
-```
-
----
-
-## 9. How to Run It
+Commands:
 
 ```bash
-# One-command launch (backend :8000 + frontend :5173)
-./start.sh
-# Open http://localhost:5173
-
-# Manual backend
-source .venv/bin/activate
-uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
-
-# Manual frontend
-cd frontend && npm install && npm run dev
+PYTHONPATH=. .venv/bin/python -m pytest tests/ -q
+npm --prefix frontend run build
+npm --prefix frontend run lint
 ```
 
-Upload a document:
-```bash
-curl -X POST http://localhost:8000/documents/upload -F "file=@policy.pdf" -F "uploaded_by=pavan"
-```
+Tests isolate document storage, keys, provenance and ChromaDB. Coverage includes authentication boundaries, JWT expiry/forgery, classification checks, signed ingestion, query-time quarantine without a preceding listing, missing evidence, chunk modification, signed poisoning, public-only verification and malformed metadata. The local embedding-model integration remains part of the upload test. No live OpenRouter request is required. Audit tests cover role gating, query/upload
+telemetry, call-site privacy, filtering/pagination and persistence failure.
 
-Ask a question:
-```bash
-curl -X POST http://localhost:8000/query -H "Content-Type: application/json" \
-  -d '{"question": "What is the password rotation policy?"}'
-```
+Fresh verification on September 17, 2026: **68 passed, 1 warning**; TypeScript/Vite build
+passed and lint returned zero warnings/errors. The warning concerns Starlette TestClient's
+httpx deprecation. These checks are not browser acceptance or a live provider experiment.
 
----
+## Limits and remaining academic work
 
-## 10. Open Decisions (to finalize in Stages 7–12)
+- A broader held-out corpus, measured false-positive/negative rates, retrieval quality, answer quality and secure-versus-baseline latency remain research work. No universal protection percentage is justified.
+- Context delimiters and system instructions are mitigations, not a hard prompt-injection boundary.
+- Oversampling is bounded to three times top-K; filtering can underfill results. Long-document extraction and embedding remain resource-intensive.
+- Authorized context is sent to OpenRouter. Operators must approve external processing of their data; no classification-specific egress policy is implemented.
+- Production deployment still needs TLS, request/rate limits, quotas, identity lifecycle/revocation, monitoring, backups and private-key access controls. Restrict `.env` and existing private keys to the service owner; new private key writes use mode 0600.
+- Historical reports mentioned an exposed provider key. Rotation of externally exposed credentials cannot be established from this checkout; repository history alone is not evidence of rotation.
 
-- Digital-signature algorithm (Ed25519 / RSA-PSS / ECDSA)
-- PKI / key-management architecture (kept simple for the prototype)
-- Poison-detector approach
-- Prompt-injection detector (rules + security classifier; NVIDIA guard model candidate)
-- Trust-score formula and thresholds (must be experimentally justified)
-- Authentication implementation (JWT / FastAPI)
-- RBAC schema and roles
-- Final dataset collection (TrustRAG Enterprise Security Corpus)
-- Final literature set (must be IEEE/ACM/Springer/Elsevier-only per lecturer requirement)
+## Running the project
 
----
+Use the configuration, credential setup and authenticated API examples in [README.md](README.md). `./start.sh` launches the local development servers. Node.js must satisfy Vite's requirement: 20.19+ or 22.12+ on supported release lines.
 
-## 11. One-Sentence Summary
 
-> **TrustRAG is a security-enhanced RAG framework that verifies and evaluates documents before indexing, enforces trust, provenance, and authorization during retrieval, detects poisoning and prompt-injection attempts, and supplies only trusted and authorized context to the LLM.**
+### Development recovery record
 
----
+On September 17, 2026, stopped/suspended backend and Vite processes were cleared and
+restarted. Backend health, frontend HTTP 200 and employee demo login succeeded. Demo mode
+was explicitly enabled in the private local `.env`; the OpenRouter key was empty at that
+check. This records a past recovery, not guaranteed current uptime. Ctrl+Z was a suspected,
+not proven, cause. This documentation pass changed neither application code nor services.
 
-## 12. Before Sharing the Repo (Important)
-
-- 🔴 **Rotate the leaked Zai API key** (it is in git history at commit `88df6e8`) and purge it from history before sharing.
-- Add a proper `pytest` test suite and a backend linter (ruff).
-- Consider `BackgroundTasks` for large-document ingestion (e.g., the NIST doc created 1,419 chunks over several minutes).
+A missing provider key does not prevent startup. If retrieval finds no eligible context,
+query returns 200 without generation; if generation is reached without a key, it returns
+502. Retrieval failures return 503. Provider failures normally retry before returning a
+labelled retrieved-context fallback. Therefore HTTP 200 alone does not prove model generation.

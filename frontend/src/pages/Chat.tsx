@@ -61,6 +61,9 @@ export default function Chat() {
         sources: response.sources,
         timestamp: new Date(),
         mode: response.mode,
+        pipeline_log: response.pipeline_log,
+        request_id: response.request_id,
+        duration_ms: response.duration_ms,
       };
       setMessages((prev) => [...prev, assistantMsg]);
     } catch (err) {
@@ -105,31 +108,37 @@ export default function Chat() {
         <PageHeader
           breadcrumb={<>/ workspace / <span className="text-primary font-bold">rag-chat</span></>}
           actions={
-            <div className="flex items-center space-x-2 bg-surface-container p-1 rounded-lg border border-outline-variant">
-              <button
-                type="button"
-                onClick={() => setMode('secure')}
-                className={`px-3 py-1 text-[11px] font-bold rounded uppercase transition-colors ${
-                  mode === 'secure'
-                    ? 'bg-secondary text-on-secondary shadow'
-                    : 'text-on-surface-variant hover:text-on-surface'
-                }`}
-              >
-                🔒 SECURE TRUSTRAG
-              </button>
-              {canRunBaseline && (
+            <div className="flex items-center space-x-2">
+              <div className="hidden sm:flex items-center space-x-1.5 px-2.5 py-1 bg-surface-container border border-outline-variant rounded text-[11px] text-on-surface-variant font-mono">
+                <span className="w-2 h-2 rounded-full bg-secondary"></span>
+                <span>OpenRouter · nemotron-3.5</span>
+              </div>
+              <div className="flex items-center space-x-2 bg-surface-container p-1 rounded-lg border border-outline-variant">
                 <button
                   type="button"
-                  onClick={() => setMode('baseline')}
+                  onClick={() => setMode('secure')}
                   className={`px-3 py-1 text-[11px] font-bold rounded uppercase transition-colors ${
-                    mode === 'baseline'
-                      ? 'bg-error text-on-error shadow'
+                    mode === 'secure'
+                      ? 'bg-secondary text-on-secondary shadow'
                       : 'text-on-surface-variant hover:text-on-surface'
                   }`}
                 >
-                  ⚠️ UNFILTERED BASELINE
+                  🔒 SECURE TRUSTRAG
                 </button>
-              )}
+                {canRunBaseline && (
+                  <button
+                    type="button"
+                    onClick={() => setMode('baseline')}
+                    className={`px-3 py-1 text-[11px] font-bold rounded uppercase transition-colors ${
+                      mode === 'baseline'
+                        ? 'bg-error text-on-error shadow'
+                        : 'text-on-surface-variant hover:text-on-surface'
+                    }`}
+                  >
+                    ⚠️ UNFILTERED BASELINE
+                  </button>
+                )}
+              </div>
             </div>
           }
         />
@@ -175,6 +184,38 @@ export default function Chat() {
                   </div>
 
                   <p className="whitespace-pre-wrap text-[14px] leading-relaxed">{msg.content}</p>
+
+                  {msg.pipeline_log && msg.pipeline_log.length > 0 && (
+                    <details className="mt-3 border-t border-outline-variant/30 pt-2">
+                      <summary className="cursor-pointer text-[10px] font-bold tracking-wider uppercase text-secondary hover:text-on-surface flex items-center gap-1">
+                        <span className="material-symbols-outlined text-[14px]" aria-hidden="true">shield</span>
+                        Security Trace
+                        {msg.duration_ms !== undefined && (
+                          <span className="font-normal normal-case text-on-surface-variant">· {msg.duration_ms}ms</span>
+                        )}
+                      </summary>
+                      <div className="mt-2 space-y-1 font-mono text-[11px] leading-relaxed">
+                        {msg.pipeline_log.map((step, i) => (
+                          <div
+                            key={i}
+                            className={
+                              step.status === 'blocked' || step.status === 'error'
+                                ? 'text-error'
+                                : step.status === 'warning'
+                                  ? 'text-tertiary'
+                                  : 'text-secondary'
+                            }
+                          >
+                            <span className="material-symbols-outlined text-[12px] align-[-2px] mr-1" aria-hidden="true">
+                              {step.status === 'blocked' ? 'block' : step.status === 'error' ? 'error' : step.status === 'warning' ? 'warning' : 'check_circle'}
+                            </span>
+                            {step.stage}
+                            {typeof step.count === 'number' ? ` (${step.count})` : ''} — {step.message}
+                          </div>
+                        ))}
+                      </div>
+                    </details>
+                  )}
                 </div>
               </div>
             ))
@@ -182,8 +223,8 @@ export default function Chat() {
 
           {isLoading && (
             <div className="flex items-center space-x-2 text-on-surface-variant text-[14px] p-4">
-              <span className="material-symbols-outlined animate-spin">sync</span>
-              <span>Evaluating trust policy & retrieving context...</span>
+              <span className="material-symbols-outlined animate-spin text-primary">sync</span>
+              <span>Evaluating trust policy & querying OpenRouter LLM...</span>
             </div>
           )}
 

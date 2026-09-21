@@ -1,9 +1,13 @@
-from fastapi import APIRouter
+import os
+
+from fastapi import APIRouter, Depends
+from backend.security.auth import get_current_user_required
 
 from backend.rag.vectorstore import get_collection_count
 from backend.api.documents import get_metadata_store
+from backend.rag.llm import LLM_MODEL
 
-router = APIRouter(tags=["dashboard"])
+router = APIRouter(tags=["dashboard"], dependencies=[Depends(get_current_user_required)])
 
 
 @router.get("/dashboard/stats")
@@ -26,7 +30,9 @@ def get_dashboard_stats():
         "chunks_stored": chunk_count,
         "vector_db_status": vector_db_status,
         "embedding_model": "EmbeddingGemma-300M",
-        "llm_model": "glm-4.7-flash",
+        "llm_provider": "OpenRouter",
+        "llm_model": LLM_MODEL,
+        "llm_status": "configured" if os.environ.get("OPENROUTER_API_KEY", "").strip() else "not_configured",
         "rag_status": rag_status,
     }
 
@@ -37,10 +43,10 @@ def get_system_status():
     # Test each component
     components = {
         "backend": {"status": "online", "version": "0.1.0", "detail": "FastAPI"},
-        "embedding_model": {"status": "ready", "name": "EmbeddingGemma-300M", "dimensions": 768},
+        "embedding_model": {"status": "not_checked", "name": "EmbeddingGemma-300M", "dimensions": 768},
         "vector_db": {"status": "connected", "engine": "ChromaDB", "metric": "cosine"},
-        "llm": {"status": "ready", "provider": "Zai", "model": "glm-4.7-flash"},
-        "rag_pipeline": {"status": "operational", "detail": "Baseline RAG"},
+        "llm": {"status": "configured" if os.environ.get("OPENROUTER_API_KEY", "").strip() else "not_configured", "provider": "OpenRouter", "model": LLM_MODEL},
+        "rag_pipeline": {"status": "not_checked", "detail": "Secure RAG; end-to-end readiness not probed"},
     }
 
     # Verify ChromaDB is actually reachable

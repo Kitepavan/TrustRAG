@@ -11,15 +11,17 @@ const PAGE_SIZE = 5;
 export default function Documents() {
   const { data, loading, error, refetch } = useApi(() => api.getDocuments());
   const [uploadResult, setUploadResult] = useState<{ success: boolean; message: string; doc?: DocumentInfo } | null>(null);
+  const [accessLevel, setAccessLevel] = useState('INTERNAL');
+  const [signature, setSignature] = useState('');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const uploadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleUpload = async (file: File) => {
-    const result = await api.uploadDocument(file);
+    const result = await api.uploadDocument(file, accessLevel, signature || undefined);
     setUploadResult({
-      success: true,
-      message: `Successfully indexed "${result.filename}" — ${result.total_chunks} chunks created.`,
+      success: result.trust_status !== 'Quarantined',
+      message: `"${result.filename}": ${result.trust_status} — ${result.total_chunks} chunks stored. Quarantined content is blocked from secure retrieval.`,
       doc: {
         filename: result.filename,
         size_bytes: file.size,
@@ -31,6 +33,7 @@ export default function Documents() {
         total_chars: result.total_chars,
         total_chunks: result.total_chunks,
         status: result.status,
+        trust_status: result.trust_status,
       },
     });
     void refetch();
@@ -78,6 +81,14 @@ export default function Documents() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
         {/* Upload Section */}
         <div className="bg-surface-container border border-outline-variant p-6">
+          <label className="block mb-3 text-on-surface">Classification
+            <select className="ml-3 bg-surface-container border" value={accessLevel} onChange={e => setAccessLevel(e.target.value)}>
+              {['PUBLIC', 'INTERNAL', 'HR_CONFIDENTIAL', 'IT_SEC_CONFIDENTIAL', 'RESTRICTED'].map(level => <option key={level}>{level}</option>)}
+            </select>
+          </label>
+          <label className="block mb-3 text-on-surface">Optional Ed25519 signature (base64)
+            <input className="w-full bg-surface-container border p-2" value={signature} onChange={e => setSignature(e.target.value)} />
+          </label>
           <FileUpload onUpload={handleUpload} />
           {uploadResult && (
             <div className={`mt-4 px-4 py-3 rounded text-sm ${
@@ -157,7 +168,7 @@ export default function Documents() {
                 </thead>
                 <tbody>
                   {pagedDocs.map((doc) => (
-                    <tr key={doc.filename} className="border-b border-outline-variant hover:bg-surface-variant transition-colors">
+                    <tr key={doc.document_id} className="border-b border-outline-variant hover:bg-surface-variant transition-colors">
                       <td className="py-3 px-4">
                         <div className="flex items-center space-x-3">
                           <span className="material-symbols-outlined text-primary" aria-hidden="true">description</span>
@@ -165,7 +176,7 @@ export default function Documents() {
                         </div>
                       </td>
                       <td className="py-3 px-4">
-                        <StatusBadge status={doc.status || 'processed'} />
+                        <StatusBadge status={doc.trust_status || 'Quarantined'} />
                       </td>
                       <td className="py-3 px-4">
                         <span className="text-[14px] leading-[20px] text-on-surface-variant">

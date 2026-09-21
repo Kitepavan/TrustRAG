@@ -108,8 +108,11 @@ def decode_jwt_token(token: str) -> Optional[dict]:
         if not hmac.compare_digest(_base64url_encode(expected_sig), sig_b64):
             return None
 
+        header = json.loads(_base64url_decode(header_b64))
+        if header != {"alg": "HS256", "typ": "JWT"}:
+            return None
         payload = json.loads(_base64url_decode(payload_b64).decode("utf-8"))
-        if payload.get("exp", 0) < time.time():
+        if not isinstance(payload, dict) or type(payload.get("exp")) not in (int, float) or payload["exp"] <= time.time():
             return None
 
         return payload
@@ -120,8 +123,18 @@ def decode_jwt_token(token: str) -> Optional[dict]:
 def authenticate_user(username: str, password: str) -> Optional[Dict[str, Any]]:
     """Authenticate user credentials against DEMO_USERS dictionary."""
     user = DEMO_USERS.get(username)
-    if user and secrets.compare_digest(user["password"], password):
-        return user
+    if user:
+        configured = os.environ.get(f"TRUSTRAG_PASSWORD_HASH_{username.upper()}", "")
+        if configured:
+            try:
+                salt, expected = configured.split(":", 1)
+                actual = hashlib.scrypt(password.encode(), salt=bytes.fromhex(salt), n=16384, r=8, p=1).hex()
+                if secrets.compare_digest(actual, expected):
+                    return user
+            except ValueError:
+                return None
+        elif os.environ.get("TRUSTRAG_DEMO_MODE", "false").lower() == "true" and secrets.compare_digest(user["password"], password):
+            return user
     return None
 
 
@@ -129,9 +142,7 @@ def check_rbac_permission(user_clearance_tags: List[str], required_access_level:
     """
     Verify if user clearance tags permit accessing a document with required_access_level.
     """
-    if not required_access_level or required_access_level.upper() in ["PUBLIC", "INTERNAL"]:
-        return True
-    return required_access_level.upper() in [tag.upper() for tag in user_clearance_tags]
+    return isinstance(required_access_level, str) and required_access_level.upper() in [tag.upper() for tag in user_clearance_tags]
 
 
 async def get_current_user_optional(

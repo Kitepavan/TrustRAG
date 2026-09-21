@@ -68,8 +68,18 @@ done
 # --- Frontend ---
 echo -e "${BLUE}[2/2] Starting Vite frontend...${NC}"
 cd "$PROJECT_DIR/frontend"
-npm run dev -- --port "$FRONTEND_PORT" --host 0.0.0.0 &
-FRONTEND_PID=$!
+if command -v npm >/dev/null 2>&1; then
+    npm run dev -- --port "$FRONTEND_PORT" --host 0.0.0.0 &
+    FRONTEND_PID=$!
+elif [ -f "./node_modules/.bin/vite" ]; then
+    NODE_BIN="$(command -v node 2>/dev/null || echo /home/pavan/qwen3_4b/venv/lib/python3.12/site-packages/playwright/driver/node)"
+    "$NODE_BIN" ./node_modules/.bin/vite --port "$FRONTEND_PORT" --host 0.0.0.0 &
+    FRONTEND_PID=$!
+else
+    echo -e "${RED}Neither npm nor node/vite binary was found to launch the frontend.${NC}"
+    cleanup
+    exit 1
+fi
 echo -e "  ${GREEN}Frontend PID: $FRONTEND_PID${NC}"
 
 # Wait for frontend to be ready

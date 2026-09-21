@@ -62,9 +62,9 @@ class TrustEngine:
         # Layer 4: Compute Final Trust Category and Trust Score
         if is_signed and signature_valid:
             if poison_res["is_poisoned"]:
-                trust_category = "Suspicious"
-                trust_score = 0.5
-                policy_decision = "ALLOW_WITH_WARNING"
+                trust_category = "Quarantined"
+                trust_score = 0.0
+                policy_decision = "BLOCK"
             else:
                 trust_category = "Trusted"
                 trust_score = 1.0

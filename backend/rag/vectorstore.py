@@ -1,5 +1,5 @@
 import chromadb
-from pathlib import Path
+from backend.security.hashing import compute_sha256_str
 
 DB_PATH = "data/chroma_db"
 
@@ -31,6 +31,7 @@ def add_chunks(chunks: list[dict]):
             "page_number": int(c.get("page_number", 0)),
             "char_count": int(c.get("char_count", 0)),
             "sha256": str(c.get("sha256", "")),
+            "text_sha256": compute_sha256_str(c["text"]),
             "signature_valid": bool(c.get("signature_valid", False)),
             "trust_status": str(c.get("trust_status", "Suspicious")),
             # Required for Defense Filter 2 (RBAC) to fire: without a stored
@@ -53,6 +54,10 @@ def query_chunks(query_embedding: list[float], top_k: int = 3) -> list[dict]:
     """Query ChromaDB for similar chunks."""
     collection = get_collection()
 
+    count = collection.count()
+    if not count:
+        return []
+    top_k = min(top_k, count)
     results = collection.query(
         query_embeddings=[query_embedding],
         n_results=top_k,
@@ -73,3 +78,14 @@ def query_chunks(query_embedding: list[float], top_k: int = 3) -> list[dict]:
 
 def get_collection_count() -> int:
     return get_collection().count()
+
+
+def quarantine_document(document_id: str):
+    collection = get_collection()
+    records = collection.get(where={"document_id": document_id}, include=["metadatas"])
+    if records["ids"]:
+        collection.update(ids=records["ids"], metadatas=[dict(meta, trust_status="Quarantined") for meta in records["metadatas"]])
+
+
+def delete_document(document_id: str):
+    get_collection().delete(where={"document_id": document_id})

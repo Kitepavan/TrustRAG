@@ -125,7 +125,7 @@ export default function Dashboard() {
       <div className="bg-surface-container border border-outline-variant p-6 mb-8">
         <div className="flex items-center space-x-3 mb-6">
           <span className="material-symbols-outlined text-primary" aria-hidden="true">account_tree</span>
-          <h2 className="text-[18px] leading-[24px] font-semibold text-on-surface">Baseline RAG Pipeline</h2>
+          <h2 className="text-[18px] leading-[24px] font-semibold text-on-surface">RAG Pipeline</h2>
         </div>
 
         <div className="flex items-center justify-between gap-2 overflow-x-auto pb-2">
@@ -153,18 +153,19 @@ export default function Dashboard() {
         <div className="mt-6 p-4 border border-dashed border-outline-variant rounded bg-surface-dim">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-3">
-              <span className="material-symbols-outlined text-on-surface-variant" aria-hidden="true">shield</span>
+              <span className="material-symbols-outlined text-secondary" aria-hidden="true">shield</span>
               <div>
-                <span className="text-[11px] leading-[16px] tracking-[0.05em] font-bold text-on-surface-variant uppercase">
-                  PROPOSED SECURITY LAYER
+                <span className="text-[11px] leading-[16px] tracking-[0.05em] font-bold text-secondary uppercase">
+                  TrustRAG Security Layer
                 </span>
                 <p className="text-[14px] leading-[20px] text-on-surface-variant mt-1">
-                  Coming in next development phase: Differential privacy, PII scrubbing, and verified retrieval attestations.
+                  Active defense-in-depth: Ed25519 signature verification, SHA-256 integrity, poison &amp; injection
+                  detection, trust evaluation, and RBAC-filtered retrieval.
                 </p>
               </div>
             </div>
-            <span className="text-[11px] leading-[16px] tracking-[0.05em] font-bold text-on-surface-variant px-3 py-1 border border-outline-variant rounded">
-              PLANNED
+            <span className="text-[11px] leading-[16px] tracking-[0.05em] font-bold text-secondary px-3 py-1 border border-secondary/40 rounded">
+              ACTIVE
             </span>
           </div>
         </div>
@@ -188,7 +189,7 @@ export default function Dashboard() {
             </div>
             <div className="flex items-center justify-between">
               <span className="text-on-surface-variant">LLM Provider</span>
-              <span className="text-on-surface-variant">{stats?.llm_model ?? 'Not configured'}</span>
+              <span className="text-secondary">{stats?.llm_provider ?? 'OpenRouter'} ({stats?.llm_model ?? 'Not configured'})</span>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-on-surface-variant">Embedding Model</span>

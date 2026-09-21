@@ -1,14 +1,13 @@
-import { useState, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
-import { api } from '../services/api';
+import { api, logout } from '../services/api';
 import { useApi } from '../hooks/useApi';
-import type { Persona } from '../types';
 
 const navItems = [
   { to: '/', label: 'DASHBOARD', icon: 'dashboard' },
   { to: '/documents', label: 'DOCUMENTS', icon: 'description' },
   { to: '/chat', label: 'RAG CHAT', icon: 'chat_bubble' },
   { to: '/evaluation', label: 'SECURITY BENCHMARK', icon: 'verified_user' },
+  { to: '/audit', label: 'AUDIT LOG', icon: 'receipt_long' },
   { to: '/knowledge', label: 'KNOWLEDGE BASE', icon: 'database' },
   { to: '/status', label: 'SYSTEM STATUS', icon: 'analytics' },
 ];
@@ -22,23 +21,8 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
   const { data: health } = useApi(() => api.getHealth(), []);
   const isHealthy = health?.status === 'healthy';
 
-  const [personas, setPersonas] = useState<Persona[]>([]);
-  const [selectedUser, setSelectedUser] = useState<string>('emp_user');
-
-  useEffect(() => {
-    api.getPersonas().then(setPersonas).catch(() => {});
-  }, []);
-
-  const handlePersonaChange = async (username: string) => {
-    setSelectedUser(username);
-    // Passwords are no longer served by /auth/personas; the switcher logs in with
-    // the fixed demo credential for the selected persona.
-    try {
-      await api.loginPersona(username);
-    } catch (e) {
-      console.error('Persona login failed', e);
-    }
-  };
+  const { data: currentUser } = useApi(() => api.getCurrentUser(), []);
+  const canViewAudit = currentUser?.role === 'Admin' || currentUser?.role === 'IT_Security';
 
   return (
     <>
@@ -76,50 +60,47 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
           </p>
         </div>
 
-        {/* Persona Selector (RBAC Demo Switcher) */}
         <div className="px-6 mb-6">
-          <label className="block text-[10px] font-bold uppercase tracking-wider text-on-surface-variant mb-1">
-            RBAC Demo Persona
-          </label>
-          <select
-            value={selectedUser}
-            onChange={(e) => handlePersonaChange(e.target.value)}
-            className="w-full bg-surface-variant text-on-surface border border-outline-variant text-[12px] rounded-lg px-2.5 py-2 font-medium focus:outline-none focus:border-primary"
-          >
-            {personas.length > 0 ? (
-              personas.map((p) => (
-                <option key={p.username} value={p.username}>
-                  {p.full_name} ({p.role})
-                </option>
-              ))
-            ) : (
-              <option value="emp_user">Standard Employee (Employee)</option>
-            )}
-          </select>
+          <div className="p-3 rounded-lg bg-surface-variant/40 border border-outline-variant/60 flex items-center justify-between">
+            <div className="min-w-0 pr-2">
+              <p className="text-[13px] font-semibold text-on-surface truncate">{currentUser?.full_name ?? 'User'}</p>
+              <p className="text-[11px] font-mono text-primary uppercase font-medium">{currentUser?.role ?? 'Role'}</p>
+            </div>
+            <button
+              onClick={logout}
+              title="Sign out"
+              aria-label="Sign out"
+              className="p-1.5 hover:bg-surface-variant rounded text-on-surface-variant hover:text-error transition-colors flex items-center justify-center"
+            >
+              <span className="material-symbols-outlined text-[18px]">logout</span>
+            </button>
+          </div>
         </div>
 
         {/* Navigation */}
         <nav className="flex-1 space-y-1" aria-label="Main navigation">
-          {navItems.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.to === '/'}
-              onClick={onClose}
-              className={({ isActive }) =>
-                `flex items-center px-6 py-3 transition-all duration-150 ease-in-out ${
-                  isActive
-                    ? 'bg-surface-variant text-primary border-l-2 border-primary'
-                    : 'text-on-surface-variant font-medium hover:bg-surface-variant hover:text-on-surface'
-                }`
-              }
-            >
-              <span className="material-symbols-outlined mr-3" aria-hidden="true">{item.icon}</span>
-              <span className="text-[11px] leading-[16px] tracking-[0.05em] font-bold uppercase">
-                {item.label}
-              </span>
-            </NavLink>
-          ))}
+          {navItems
+            .filter((item) => item.to !== '/audit' || canViewAudit)
+            .map((item) => (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                end={item.to === '/'}
+                onClick={onClose}
+                className={({ isActive }) =>
+                  `flex items-center px-6 py-3 transition-all duration-150 ease-in-out ${
+                    isActive
+                      ? 'bg-surface-variant text-primary border-l-2 border-primary'
+                      : 'text-on-surface-variant font-medium hover:bg-surface-variant hover:text-on-surface'
+                  }`
+                }
+              >
+                <span className="material-symbols-outlined mr-3" aria-hidden="true">{item.icon}</span>
+                <span className="text-[11px] leading-[16px] tracking-[0.05em] font-bold uppercase">
+                  {item.label}
+                </span>
+              </NavLink>
+            ))}
         </nav>
 
         {/* Footer */}

@@ -8,6 +8,7 @@ from backend.api.query import router as query_router
 from backend.api.dashboard import router as dashboard_router
 from backend.api.auth import router as auth_router
 from backend.api.evaluation import router as evaluation_router
+from backend.api.audit import router as audit_router
 
 app = FastAPI(
     title="TrustRAG",
@@ -38,6 +39,7 @@ app.include_router(documents_router)
 app.include_router(query_router)
 app.include_router(dashboard_router)
 app.include_router(evaluation_router)
+app.include_router(audit_router)
 
 
 @app.get("/")

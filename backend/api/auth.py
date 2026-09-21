@@ -10,7 +10,7 @@ from typing import List, Dict, Any
 from backend.security.auth import (
     authenticate_user,
     create_jwt_token,
-    get_current_user_optional,
+    get_current_user_required,
     DEMO_USERS,
 )
 
@@ -55,7 +55,7 @@ async def login(req: LoginRequest):
 
 
 @router.get("/me")
-async def get_me(user: Dict[str, Any] = Depends(get_current_user_optional)):
+async def get_me(user: Dict[str, Any] = Depends(get_current_user_required)):
     """Get current authenticated user profile."""
     return {
         "username": user["username"],

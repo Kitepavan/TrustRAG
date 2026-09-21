@@ -16,7 +16,7 @@ export default function KnowledgeBase() {
       <div className="mb-8">
         <h1 className="text-[24px] leading-[32px] font-semibold text-on-surface">Knowledge Base</h1>
         <p className="text-[14px] leading-[20px] text-on-surface-variant mt-1">
-          View all indexed documents and their chunk data.
+          View authorized document metadata and chunk counts.
         </p>
       </div>
 
@@ -43,10 +43,10 @@ export default function KnowledgeBase() {
           <div className="divide-y divide-outline-variant min-w-[900px]">
             {data.documents.map((doc) => (
               <DocumentRow
-                key={doc.filename}
+                key={doc.document_id}
                 doc={doc}
-                expanded={expandedDoc === doc.filename}
-                onToggle={() => setExpandedDoc(expandedDoc === doc.filename ? null : doc.filename)}
+                expanded={expandedDoc === doc.document_id}
+                onToggle={() => setExpandedDoc(expandedDoc === doc.document_id ? null : (doc.document_id ?? null))}
               />
             ))}
           </div>
@@ -113,7 +113,7 @@ function DocumentRow({ doc, expanded, onToggle }: { doc: DocumentInfo; expanded:
             <DetailItem label="Characters" value={doc.total_chars ? doc.total_chars.toLocaleString() : '—'} />
             <DetailItem label="File Size" value={`${(doc.size_bytes / 1024).toFixed(1)} KB`} />
             <DetailItem label="Uploaded By" value={doc.uploaded_by || '—'} />
-            <DetailItem label="Status" value={doc.status || '—'} />
+            <DetailItem label="Status" value={doc.trust_status || 'Quarantined'} />
           </div>
           {doc.sha256 && (
             <div className="mt-2">

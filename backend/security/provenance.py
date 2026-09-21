@@ -4,8 +4,6 @@ Records document lineage, integrity hashes, signature status, and audit history.
 """
 
 from datetime import datetime, timezone
-import json
-import os
 from pathlib import Path
 from typing import Dict, List, Optional
 from pydantic import BaseModel, Field
@@ -40,26 +38,21 @@ class ProvenanceTracker:
         """Load all provenance records from JSON storage."""
         if not self.log_path.exists():
             return {}
-        try:
-            with open(self.log_path, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except (json.JSONDecodeError, OSError):
-            return {}
+        from backend.security.document_store import load_json
+        return load_json(self.log_path)
 
     def _save_all(self, records: Dict[str, dict]) -> None:
         """Atomic save of records dictionary (write tmp + fsync + os.replace)."""
-        tmp_path = self.log_path.with_suffix(self.log_path.suffix + ".tmp")
-        with open(tmp_path, "w", encoding="utf-8") as f:
-            json.dump(records, f, indent=2)
-            f.flush()
-            os.fsync(f.fileno())
-        os.replace(tmp_path, self.log_path)
+        from backend.security.document_store import save_json
+        save_json(self.log_path, records)
 
     def record_provenance(self, record: ProvenanceRecord) -> None:
         """Record or update a document's provenance record."""
-        records = self._load_all()
-        records[record.document_id] = record.model_dump()
-        self._save_all(records)
+        from backend.security.document_store import store_lock
+        with store_lock(self.log_path):
+            records = self._load_all()
+            records[record.document_id] = record.model_dump()
+            self._save_all(records)
 
     def get_provenance(self, document_id: str) -> Optional[ProvenanceRecord]:
         """Retrieve a provenance record by document_id."""

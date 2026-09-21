@@ -14,8 +14,8 @@ export default function Evaluation() {
     try {
       const res = await api.runEvaluation();
       setData(res);
-    } catch (err: any) {
-      setError(err.message || 'Failed to run security benchmark evaluation');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to run security benchmark evaluation');
     } finally {
       setLoading(false);
     }
@@ -46,7 +46,7 @@ export default function Evaluation() {
       <div className="mb-8">
         <h1 className="text-[24px] leading-[32px] font-semibold text-on-surface">Academic Security Benchmark</h1>
         <p className="text-[14px] leading-[20px] text-on-surface-variant mt-1">
-          Experimental comparative evaluation: Baseline RAG vs TrustRAG Framework
+          Synthetic component checks; not an end-to-end LLM attack evaluation.
         </p>
       </div>
 
@@ -67,7 +67,7 @@ export default function Evaluation() {
             <p className="text-[32px] font-extrabold text-secondary mt-1">
               {data.summary.trustrag_protection_rate}%
             </p>
-            <p className="text-[12px] text-secondary/80 mt-1">100% Attack Mitigation</p>
+            <p className="text-[12px] text-secondary/80 mt-1">{data.scenarios.filter(s => s.trustrag_passed).length} of {data.scenarios.length} checks passed</p>
           </div>
 
           <div className="p-5 bg-surface-container border border-error/40 rounded-xl shadow-lg relative overflow-hidden">
@@ -78,7 +78,7 @@ export default function Evaluation() {
             <p className="text-[32px] font-extrabold text-error mt-1">
               {data.summary.baseline_protection_rate}%
             </p>
-            <p className="text-[12px] text-error/80 mt-1">Vulnerable to all vectors</p>
+            <p className="text-[12px] text-error/80 mt-1">Unfiltered-control assumptions</p>
           </div>
 
           <div className="p-5 bg-surface-container border border-outline-variant rounded-xl shadow-lg">
@@ -90,11 +90,11 @@ export default function Evaluation() {
           </div>
 
           <div className="p-5 bg-surface-container border border-outline-variant rounded-xl shadow-lg">
-            <p className="text-[11px] font-bold text-on-surface-variant uppercase tracking-wider">Latency Overhead</p>
+            <p className="text-[11px] font-bold text-on-surface-variant uppercase tracking-wider">Suite Duration</p>
             <p className="text-[32px] font-extrabold text-on-surface mt-1">
-              {data.summary.latency_overhead_ms} ms
+              {data.summary.suite_duration_ms} ms
             </p>
-            <p className="text-[12px] text-on-surface-variant mt-1">Sub-millisecond execution</p>
+            <p className="text-[12px] text-on-surface-variant mt-1">Not pipeline latency overhead</p>
           </div>
         </div>
       )}
@@ -106,11 +106,11 @@ export default function Evaluation() {
             <div>
               <h2 className="text-[18px] font-bold text-on-surface">Attack Benchmark Scenarios ({data.scenarios.length})</h2>
               <p className="text-[12px] text-on-surface-variant mt-0.5">
-                Head-to-head empirical testing across active threat vectors
+                Fixed synthetic cases; no measured LLM attack success rate
               </p>
             </div>
             <span className="px-3 py-1 bg-surface-variant text-primary text-[11px] font-bold rounded-full uppercase tracking-wider">
-              Academic Corpus v1.0
+              Component checks
             </span>
           </div>
 
@@ -137,7 +137,7 @@ export default function Evaluation() {
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-[12px] font-bold text-error uppercase tracking-wider">Baseline RAG</span>
                       <span className="px-2 py-0.5 bg-error/20 text-error text-[10px] font-bold rounded uppercase">
-                        VULNERABLE
+                        {sc.baseline_passed ? 'PASSED' : 'NOT BLOCKED'}
                       </span>
                     </div>
                     <p className="text-[13px] text-on-surface-variant">{sc.baseline_result}</p>
@@ -148,7 +148,7 @@ export default function Evaluation() {
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-[12px] font-bold text-secondary uppercase tracking-wider">TrustRAG Framework</span>
                       <span className="px-2 py-0.5 bg-secondary/20 text-secondary text-[10px] font-bold rounded uppercase">
-                        PROTECTED
+                        {sc.trustrag_passed ? 'PASSED' : 'FAILED'}
                       </span>
                     </div>
                     <p className="text-[13px] text-on-surface-variant">{sc.trustrag_result}</p>

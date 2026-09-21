@@ -34,6 +34,7 @@ def save_private_key_pem(private_key: ed25519.Ed25519PrivateKey, file_path: Path
         encryption_algorithm=serialization.NoEncryption(),
     )
     with open(file_path, "wb") as f:
+        os.fchmod(f.fileno(), 0o600)
         f.write(pem)
 
 
@@ -76,8 +77,12 @@ def ensure_enterprise_keys() -> Tuple[ed25519.Ed25519PrivateKey, ed25519.Ed25519
     if DEFAULT_PRIVATE_KEY_PATH.exists() and DEFAULT_PUBLIC_KEY_PATH.exists():
         priv = load_private_key_pem(DEFAULT_PRIVATE_KEY_PATH)
         pub = load_public_key_pem(DEFAULT_PUBLIC_KEY_PATH)
+        if priv.public_key().public_bytes_raw() != pub.public_bytes_raw():
+            raise ValueError("Enterprise keypair does not match")
         return priv, pub
 
+    if DEFAULT_PRIVATE_KEY_PATH.exists() or DEFAULT_PUBLIC_KEY_PATH.exists():
+        raise ValueError("Incomplete enterprise keypair; restore missing key instead of rotating automatically")
     priv, pub = generate_ed25519_keypair()
     save_private_key_pem(priv, DEFAULT_PRIVATE_KEY_PATH)
     save_public_key_pem(pub, DEFAULT_PUBLIC_KEY_PATH)
@@ -107,14 +112,13 @@ def verify_signature(
     If public_key is omitted, uses the default enterprise public key.
     Returns True if valid, False if invalid or corrupt signature.
     """
-    if public_key is None:
-        _, public_key = ensure_enterprise_keys()
-
     try:
-        signature_bytes = base64.b64decode(signature_b64)
+        if public_key is None:
+            public_key = load_public_key_pem(DEFAULT_PUBLIC_KEY_PATH)
+        signature_bytes = base64.b64decode(signature_b64, validate=True)
         public_key.verify(signature_bytes, data)
         return True
-    except (InvalidSignature, ValueError):
+    except (InvalidSignature, ValueError, OSError, TypeError):
         # InvalidSignature = bad signature; ValueError covers malformed base64.
         # Fails closed: any verification error is treated as untrusted.
         return False

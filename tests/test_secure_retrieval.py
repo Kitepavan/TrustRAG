@@ -13,7 +13,10 @@ def test_secure_retrieval_filtering():
     user_admin = {"username": "admin", "role": "Admin", "clearance_tags": ["PUBLIC", "INTERNAL", "HR_CONFIDENTIAL", "RESTRICTED"]}
 
     # Baseline mode returns raw candidates
-    baseline_results = secure_retrieve_chunks(dummy_embedding, user=user_emp, top_k=3, mode="baseline")
+    with pytest.raises(Exception) as exc:
+        secure_retrieve_chunks(dummy_embedding, user=user_emp, top_k=3, mode="baseline")
+    assert exc.value.status_code == 403
+    baseline_results = secure_retrieve_chunks(dummy_embedding, user=user_admin, top_k=3, mode="baseline")
     assert isinstance(baseline_results, list)
 
     # Secure mode filters out quarantined / unauthorized items
