@@ -42,7 +42,7 @@
 - Document listing/details respect classification; upload classification cannot exceed the authenticated account's clearance. Uploader identity comes from the token.
 - JWT header and expiry checks were tightened. `TRUSTRAG_JWT_SECRET` is required; there is no built-in signing-secret fallback in application code.
 - Demo passwords are disabled by default and require `TRUSTRAG_DEMO_MODE=true`. Configured scrypt password hashes take precedence.
-- The frontend uses explicit sign-in and sessionStorage, contains no embedded passwords, and unmounts protected state on logout/401. Switching accounts means signing out and signing in, not using an automatic persona switcher.
+- The frontend uses explicit sign-in and sessionStorage and unmounts protected state on logout/401. The documented demo password constants are still compiled into the bundle for the 1-click demo login, now shown only when `GET /auth/demo-status` reports demo mode; treat them as public demo credentials, not secrets. Switching accounts means signing out and signing in, not using an automatic persona switcher.
 
 ### Frontend and provider behavior
 
@@ -52,8 +52,42 @@
 - Secure chat scans the user's question with Mercury Decide before embedding or retrieval; positive or unavailable scans stop the secure request and produce a security trace. Baseline skips this query scan for controlled comparisons.
 - Baseline comparison returns raw top-K retrieval chunks and uses a plain generation prompt without TrustRAG trust labels or secure-context guardrails. Secure mode keeps trust-aware filtering and context boundaries. Baseline is restricted to Admin/IT_Security and intended for synthetic demonstrations.
 - In a recent manual attack-fixture comparison, Baseline surfaced the fixture's text in its answer while the model declined to follow its malicious instructions; TrustRAG returned an insufficient-context answer. That result alone does not prove which filtering step blocked the fixture; use the pipeline trace to confirm the retrieval reason.
-- OpenRouter replaced the historical Zai provider. Key lookup is lazy; provider failures normally retry and return a labelled context fallback. A missing key returns 502 only when generation is reached; no eligible context returns 200 without calling the provider.
+- OpenRouter replaced the historical Zai provider. Key lookup is lazy; transient provider failures (rate limit/5xx/network) retry and return a labelled context fallback, while permanent 4xx errors fail fast with 502. A missing key returns 502 only when generation is reached; no eligible context returns 200 without calling the provider.
 - Evaluation labels now distinguish check pass counts and `suite_duration_ms` from attack efficacy and RAG latency overhead. Status indicators distinguish configured/not-checked components from real probes.
+
+### Latest review pass — October 15, 2026
+
+A full read-through of the backend, frontend, tests and scripts (with the suite run as
+evidence) found one failing test and several hardening/optimization gaps. All were fixed,
+verified and committed (`1aae4cf`, pushed to `origin/master`).
+
+- **Failing test:** `tests/test_audit.py` query-trace mocks did not accept the new `mode`
+  argument. The suite now runs clean at **140 passed**, 1 warning.
+- **Deletion clearance:** `delete_document` now requires clearance for the document's
+  classification, not only an Admin/IT_Security role. An IT_Security user can no longer
+  delete HR_CONFIDENTIAL data they cannot read.
+- **Evaluation metric:** an unavailable injection classifier no longer counts as a successful
+  detection. Fail-closed blocking still occurs, but `trustrag_passed` and the block-rate
+  summary only credit a completed, positive scan.
+- **Provider errors:** permanent client errors (non-429 4xx, e.g. an invalid key) fail fast and
+  surface as 502 instead of retrying and returning a misleading "transient" fallback.
+  Rate-limit/5xx/network errors still retry with linear backoff.
+- **Retrieval performance:** neighbor verification is cached for the duration of one request
+  and repeated neighbor texts are digested once per scan, instead of re-hashing the same
+  files/text per chunk.
+- **Context delimiters:** `build_secure_context` strips literal `<trusted_context>` /
+  `</trusted_context>` from chunk text so content cannot close the untrusted-data block early.
+- **Demo login gating:** new `GET /auth/demo-status`; the sign-in UI hides 1-click demo login
+  unless demo mode is enabled. `login` is now a sync route so scrypt leaves the event loop.
+- **Evaluation endpoint:** `/evaluation/run` is POST-only; the old GET variant triggered an
+  external classifier call under safe/idempotent semantics.
+- **Smaller fixes:** unsigned-and-poisoned trust score aligned to 0.0 with a consistent
+  `poison_scan` shape, a double-checked vectorstore init lock, an unused import removed, a
+  live model label in Chat, and unmount cleanup for the Documents upload timer.
+- Stray root demo inputs (`inject.txt`, `poison.txt`, `salary.txt`, `p1.txt`, `policy.txt`,
+  `policy_tampered.txt`) were moved to `data/demo_attacks/session_inputs/`.
+- Intentionally unchanged: `document_store._propagate_quarantine` still re-asserts quarantine
+  on every verification, which self-heals a previously failed ChromaDB write.
 
 ## Security audit telemetry present in the current checkout
 

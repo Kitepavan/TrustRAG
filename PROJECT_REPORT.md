@@ -62,7 +62,7 @@ npm --prefix frontend run build
 npm --prefix frontend run lint
 ```
 
-Focused detector, trust-engine, ingestion, retrieval, evaluation and labeled-corpus tests passed with mocked model responses. A live evaluation of 7 synthetic development cases selected threshold `0.5101005014718472` by F1, with lower-threshold tie-breaking to favor recall. With that frozen threshold, a separate 6-case synthetic holdout produced 3 TP, 0 FP, 3 TN and 0 FN. See [the case-level report](docs/evaluations/2026-10-15-mercury-decide-injection-evaluation.md) for probabilities and limits. This small curated sample is initial evidence only, not a general performance estimate. The full suite did not complete here because `TestClient` hung on a simple local `/` request. Frontend build/lint and browser acceptance were not rerun because frontend files were not changed.
+Focused detector, trust-engine, ingestion, retrieval, evaluation and labeled-corpus tests passed with mocked model responses. A live evaluation of 7 synthetic development cases selected threshold `0.5101005014718472` by F1, with lower-threshold tie-breaking to favor recall. With that frozen threshold, a separate 6-case synthetic holdout produced 3 TP, 0 FP, 3 TN and 0 FN. See [the case-level report](docs/evaluations/2026-10-15-mercury-decide-injection-evaluation.md) for probabilities and limits. This small curated sample is initial evidence only, not a general performance estimate. The full suite completes: **140 passed**, 1 warning (Starlette TestClient/httpx deprecation); frontend build and lint pass. A later review pass (October 15, 2026) hardened deletion clearance, the evaluation detection metric, provider 4xx handling and context delimiters, and added regression tests — see [PROGRESS.md](PROGRESS.md).
 
 ## Limits and remaining academic work
 
@@ -88,5 +88,6 @@ not proven, cause. This documentation pass changed neither application code nor 
 
 A missing provider key does not prevent startup. If retrieval finds no eligible context,
 query returns 200 without generation; if generation is reached without a key, it returns
-502. Retrieval failures return 503. Provider failures normally retry before returning a
-labelled retrieved-context fallback. Therefore HTTP 200 alone does not prove model generation.
+502. Retrieval failures return 503. Transient provider failures (rate limit/5xx/network)
+retry before returning a labelled retrieved-context fallback; permanent 4xx errors fail
+fast with 502. Therefore HTTP 200 alone does not prove model generation.

@@ -114,8 +114,10 @@ TOKEN=$(curl -s -X POST http://localhost:8000/auth/login \
 
 Demo passwords are **disabled by default**; production-style setups set
 `TRUSTRAG_PASSWORD_HASH_<USERNAME>` per account instead (uppercase username, e.g.
-`TRUSTRAG_PASSWORD_HASH_ADMIN`). The web UI requires sign-in and contains no embedded
-passwords. **Unfiltered "baseline" mode** (which disables all security filters for
+`TRUSTRAG_PASSWORD_HASH_ADMIN`). The web UI requires sign-in. Its 1-click demo login uses
+these documented credentials, which remain compiled into the frontend bundle and are shown
+only when the backend reports demo mode (`GET /auth/demo-status`); treat them as public demo
+credentials, not secrets. **Unfiltered "baseline" mode** (which disables all security filters for
 academic comparison) is gated to `Admin` / `IT_Security` and is only shown to those roles.
 
 ## API Endpoints

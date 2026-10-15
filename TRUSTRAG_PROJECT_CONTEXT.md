@@ -1,6 +1,6 @@
 # TrustRAG — Current Handoff and Historical Context
 
-## Current checkpoint — September 17, 2026
+## Current checkpoint — October 15, 2026
 
 This section is the current handoff. Everything under **Historical archive** below is
 preserved project history: its “current”, “next”, provider, test-count and setup claims
@@ -30,20 +30,39 @@ are superseded by this checkpoint and the linked current documents.
    the API and shared retrieval function. Upload attribution comes from authentication.
 4. Credentials use environment-configured scrypt hashes; known passwords are opt-in via
    `TRUSTRAG_DEMO_MODE=true`. JWT header/expiry validation is tightened. The frontend
-   has no embedded passwords, stores tokens in sessionStorage, and unmounts protected
-   state on logout/401. Switch accounts by signing out and back in.
+   stores tokens in sessionStorage and unmounts protected state on logout/401. The
+   documented demo password constants are still compiled into the bundle for the 1-click
+   demo login, now shown only when `GET /auth/demo-status` reports demo mode; treat them
+   as public demo credentials, not secrets. Switch accounts by signing out and back in.
 5. Public-key-only verification, keypair consistency checks, 0600 new private-key writes,
    UUID filenames, extraction limits, locked/atomic JSON persistence and upload cleanup
    are implemented. Corrupt JSON raises instead of silently resetting a store.
 6. Documents exposes classification and optional signature fields and displays trust
-   status. `useApi` suppresses stale results; it does not cancel requests. Old claims
-   about upload-timer cleanup or general protection for every page are not current guarantees.
+   status. The upload-result timer is cleared on unmount. `useApi` suppresses stale
+   results; it does not cancel requests.
 7. Query/upload audit events are stored in `data/security_audit.sqlite3`; current call
    sites omit prompts, document contents, tokens and secrets. Query diagnostics include
    request IDs, stage traces, durations and persistence status. `GET /audit/events`
    requires Admin/IT_Security and supports filters/cursors. The UI displays recent
    events but does not load older pages. This is best-effort mutable telemetry, not a
    cryptographically tamper-evident or comprehensive access log.
+
+### Latest review pass — October 15, 2026
+
+A full code review (backend, frontend, tests, scripts) with the suite run as evidence found
+one failing test plus hardening and optimization gaps. All were fixed, verified (**140 passed**,
+1 warning; frontend build/lint clean) and committed and pushed as `1aae4cf`:
+
+- `delete_document` now enforces classification clearance, not just an Admin/IT_Security role.
+- An unavailable injection classifier no longer counts as a detection in `/evaluation/run`.
+- Permanent provider 4xx errors fail fast with 502 instead of a misleading retry fallback;
+  transient 429/5xx/network errors still retry.
+- Neighbor verification is cached for one request and repeated neighbor text is digested once
+  per scan.
+- `build_secure_context` strips delimiter literals from chunk text.
+- `GET /auth/demo-status` gates the UI's 1-click demo login; `login` is a sync route.
+- `/evaluation/run` is POST-only.
+- Smaller consistency and cleanup fixes; regression tests added for each behavioral change.
 
 ### Current configuration and operation
 
@@ -58,7 +77,8 @@ are superseded by this checkpoint and the linked current documents.
   ports are 8000/5173. See [README.md](README.md) for setup and demo credentials.
 - Missing provider key does not prevent startup. No eligible context returns 200 without
   generation; reaching generation without a key returns 502. Retrieval failures return
-  503. Provider failures normally retry and produce a labelled context fallback.
+  503. Transient provider failures (rate limit/5xx/network) retry and produce a labelled
+  context fallback; permanent 4xx errors fail fast with 502.
 
 ### Server recovery recorded in this session
 
@@ -83,8 +103,9 @@ restarting services; resume the correct suspended job from its owning terminal w
   provenance is not a separate authorization gate; digests assume trusted administrators.
 - Historical credential exposure is recorded below without values. Credential revocation
   cannot be established from this checkout; do not infer rotation from history cleanup.
-- No application code, `.env`, service state or presentation binaries were changed by
-  this documentation pass. Existing work remains uncommitted; no commit was requested.
+- The review-fix pass changed application, frontend and test code and was committed and
+  pushed (`1aae4cf`); `.env`, service state and presentation binaries were not touched. The
+  pre-existing presentation/slide deletions in the working tree were left uncommitted.
 
 ### Documentation map and workflow constraints
 
