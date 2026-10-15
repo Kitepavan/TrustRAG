@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { Link } from 'react-router-dom';
 import { useSidebar } from '../sidebar-context';
 
 interface PageHeaderProps {
@@ -17,7 +18,7 @@ export default function PageHeader({ breadcrumb, online = true, actions }: PageH
   const { openSidebar } = useSidebar();
 
   return (
-    <header className="flex justify-between items-center w-full px-6 h-16 bg-surface-dim border-b border-outline-variant sticky top-0 z-40 -ml-6 -mt-6 mb-6">
+    <header className="sticky top-0 z-40 -mx-5 -mt-5 mb-6 flex h-[58px] w-auto items-center justify-between border-b border-outline-variant/70 bg-background/95 px-5 backdrop-blur-sm sm:-mx-7 sm:-mt-7 sm:px-7 xl:-mx-8 xl:-mt-8 xl:px-8">
       <div className="flex items-center space-x-4 min-w-0">
         <button
           type="button"
@@ -27,39 +28,22 @@ export default function PageHeader({ breadcrumb, online = true, actions }: PageH
         >
           menu
         </button>
-        <span className="text-[14px] leading-[20px] text-on-surface-variant truncate">
+        <Link to="/" aria-label="TrustRAG dashboard" className="mr-1 flex shrink-0 items-center gap-2 lg:hidden">
+          <img src="/trustrag-mark.png" alt="" aria-hidden="true" className="h-6 w-6 object-contain" />
+          <span className="text-[14px] font-semibold tracking-[-0.03em] text-on-surface">Trust<span className="text-primary">RAG</span></span>
+        </Link>
+        <span className="hidden truncate text-[13px] leading-5 text-on-surface-variant sm:block">
           {breadcrumb}
         </span>
       </div>
-      <div className="flex items-center space-x-6 shrink-0">
+      <div className="flex shrink-0 items-center gap-4">
         {online && (
-          <div className="hidden sm:flex items-center text-secondary text-[12px] space-x-2">
-            <span className="w-2 h-2 rounded-full bg-secondary shadow-[0_0_8px_rgba(103,223,112,0.6)]"></span>
+          <div className="hidden items-center gap-2 text-[12px] text-secondary sm:flex">
+            <span className="h-2 w-2 rounded-full bg-secondary"></span>
             <span>Online</span>
           </div>
         )}
-        <div className="flex items-center space-x-4 border-l border-outline-variant pl-6">
-          <button
-            type="button"
-            aria-label="Network settings"
-            className="material-symbols-outlined text-on-surface-variant hover:text-primary transition-colors"
-          >
-            dns
-          </button>
-          <button
-            type="button"
-            aria-label="Hardware status"
-            className="material-symbols-outlined text-on-surface-variant hover:text-primary transition-colors"
-          >
-            memory
-          </button>
-          <button
-            type="button"
-            aria-label="User profile"
-            className="material-symbols-outlined text-on-surface-variant hover:text-primary transition-colors"
-          >
-            person
-          </button>
+        <div className={`${actions ? 'border-l border-outline-variant/70 pl-4' : ''}`}>
           {actions}
         </div>
       </div>

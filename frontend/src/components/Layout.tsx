@@ -8,10 +8,10 @@ export default function Layout() {
 
   return (
     <SidebarContextProvider value={{ openSidebar: () => setSidebarOpen(true) }}>
-      <div className="flex min-h-screen bg-background">
+      <div className="min-h-screen bg-background">
         <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-        <main className="flex-1 ml-0 lg:ml-[260px] overflow-auto">
-          <div className="p-6">
+        <main className="min-h-screen min-w-0 overflow-auto lg:ml-[232px]">
+          <div className="p-5 sm:p-7 xl:p-8">
             <Outlet />
           </div>
         </main>

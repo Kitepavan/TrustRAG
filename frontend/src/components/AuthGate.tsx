@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { api, logout } from '../services/api';
+import { api } from '../services/api';
 import type { Persona } from '../types';
 
 export default function AuthGate({ children }: { children: ReactNode }) {
@@ -20,7 +20,7 @@ export default function AuthGate({ children }: { children: ReactNode }) {
   }, []);
 
   if (loading) return <p className="p-8 text-on-surface">Checking session...</p>;
-  if (user) return <div key={user.username}>{children}<button className="fixed bottom-3 right-3 px-3 py-2 bg-surface-container text-on-surface border border-outline-variant rounded z-50" onClick={logout}>Sign out ({user.role})</button></div>;
+  if (user) return <div key={user.username}>{children}</div>;
   const demoPersonas = [
     { name: 'Admin', user: 'admin', pass: 'admin123', role: 'Clearance 4 (All access)', icon: 'shield_person' },
     { name: 'IT Security', user: 'sec_admin', pass: 'sec123', role: 'Clearance 3 (Audit/IT)', icon: 'security' },
@@ -48,7 +48,8 @@ export default function AuthGate({ children }: { children: ReactNode }) {
     <main className="min-h-screen flex flex-col items-center justify-center bg-surface text-on-surface p-4">
       <div className="w-full max-w-md bg-surface-container border border-outline-variant rounded-xl p-6 shadow-2xl space-y-6">
         {/* Header */}
-        <div className="text-center space-y-1">
+        <div className="space-y-1 text-center">
+          <img src="/trustrag-mark.png" alt="TrustRAG" className="mx-auto mb-3 h-11 w-11 object-contain" />
           <div className="inline-flex items-center space-x-2 px-2.5 py-1 rounded bg-primary/10 border border-primary/20 text-primary text-[11px] font-bold tracking-wider uppercase mb-2">
             <span className="material-symbols-outlined text-[14px]">lock</span>
             <span>SECURE RAG GATEWAY</span>

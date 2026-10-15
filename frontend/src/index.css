@@ -2,36 +2,36 @@
 
 /* TrustRAG Enterprise Security Dashboard Theme - Dark Mode */
 @theme {
-  --color-background: #0a0c10;
-  --color-surface: #111318;
-  --color-surface-dim: #111318;
-  --color-surface-bright: #37393e;
-  --color-surface-container-lowest: #0c0e12;
-  --color-surface-container-low: #1a1c20;
-  --color-surface-container: #1e2024;
-  --color-surface-container-high: #282a2e;
-  --color-surface-container-highest: #333539;
-  --color-surface-variant: #333539;
-  --color-on-surface: #e2e2e8;
-  --color-on-surface-variant: #c0c7d4;
-  --color-outline: #8b919d;
-  --color-outline-variant: #414752;
-  --color-primary: #a2c9ff;
-  --color-on-primary: #00315c;
-  --color-primary-container: #58a6ff;
-  --color-on-primary-container: #003a6b;
-  --color-secondary: #67df70;
-  --color-on-secondary: #00390d;
-  --color-secondary-container: #27a640;
-  --color-on-secondary-container: #00320a;
-  --color-tertiary: #fabc45;
-  --color-on-tertiary: #422c00;
-  --color-tertiary-container: #d29922;
-  --color-on-tertiary-container: #4d3500;
-  --color-error: #ffb4ab;
-  --color-on-error: #690005;
-  --color-error-container: #93000a;
-  --color-on-error-container: #ffdad6;
+  --color-background: #0b0e13;
+  --color-surface: #10141b;
+  --color-surface-dim: #0e1218;
+  --color-surface-bright: #2b3542;
+  --color-surface-container-lowest: #0a0d12;
+  --color-surface-container-low: #111720;
+  --color-surface-container: #141a23;
+  --color-surface-container-high: #1b2430;
+  --color-surface-container-highest: #252f3c;
+  --color-surface-variant: #202a37;
+  --color-on-surface: #e9edf4;
+  --color-on-surface-variant: #a6b1c2;
+  --color-outline: #8491a3;
+  --color-outline-variant: #2a3442;
+  --color-primary: #78aaff;
+  --color-on-primary: #081321;
+  --color-primary-container: #315f9e;
+  --color-on-primary-container: #dbe9ff;
+  --color-secondary: #6de2b5;
+  --color-on-secondary: #06251b;
+  --color-secondary-container: #1c6b4c;
+  --color-on-secondary-container: #d0f9e6;
+  --color-tertiary: #eec47a;
+  --color-on-tertiary: #2e2109;
+  --color-tertiary-container: #6e5421;
+  --color-on-tertiary-container: #f8e9c8;
+  --color-error: #ffaaa2;
+  --color-on-error: #35110d;
+  --color-error-container: #6d2823;
+  --color-on-error-container: #ffded9;
 }
 
 @layer base {
@@ -43,8 +43,8 @@
 
   body {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-    background-color: #0a0c10;
-    color: #e2e2e8;
+    background-color: #0b0e13;
+    color: #e9edf4;
     -webkit-font-smoothing: antialiased;
   }
 
@@ -58,14 +58,14 @@
   width: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: #1a1c20;
+  background: #111720;
 }
 ::-webkit-scrollbar-thumb {
-  background: #414752;
-  border-radius: 3px;
+  background: #344050;
+  border-radius: 999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #8b919d;
+  background: #64748b;
 }
 
 /* Material Symbols */
@@ -84,5 +84,39 @@
   right: -24px;
   width: 16px;
   height: 1px;
-  background-color: #414752;
+  background-color: #2a3442;
+}
+
+.page-enter {
+  animation: page-enter 220ms ease-out both;
+}
+
+.pipeline-step {
+  animation: step-enter 260ms ease-out both;
+}
+
+@keyframes page-enter {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes step-enter {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
 }

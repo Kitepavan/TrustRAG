@@ -1,3 +1,4 @@
+import { Fragment, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
 import { useApi } from '../hooks/useApi';
@@ -14,22 +15,67 @@ const pipelineSteps = [
   { label: 'Response', icon: 'chat' },
 ];
 
+function PipelineNode({ step, index, turnDown = false }: { step: (typeof pipelineSteps)[number]; index: number; turnDown?: boolean }) {
+  return (
+    <div role="listitem" className="pipeline-step relative flex min-w-0 flex-1 flex-col items-center gap-2" style={{ animationDelay: `${index * 35}ms` }}>
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-surface-container-high text-primary transition-colors duration-200 hover:bg-surface-container-highest sm:h-11 sm:w-11">
+        <span className="material-symbols-outlined text-[20px]" aria-hidden="true">{step.icon}</span>
+      </div>
+      <span className="max-w-full text-center text-[12px] font-medium text-on-surface-variant">{step.label}</span>
+      {turnDown && (
+        <span className="material-symbols-outlined absolute -bottom-6 right-0 text-[18px] text-primary" aria-hidden="true">
+          arrow_downward
+        </span>
+      )}
+    </div>
+  );
+}
+
+function FlowArrow({ direction }: { direction: 'forward' | 'back' }) {
+  return (
+    <span className="material-symbols-outlined shrink-0 text-[18px] text-primary" aria-hidden="true">
+      {direction === 'forward' ? 'arrow_forward' : 'arrow_back'}
+    </span>
+  );
+}
+
+function Metric({ label, icon, children }: { label: string; icon: string; children: ReactNode }) {
+  return (
+    <div className="flex min-w-0 items-start gap-3 border-b border-outline-variant/70 py-4 sm:border-b-0 xl:border-r xl:pr-4 last:border-0">
+      <span className="material-symbols-outlined mt-0.5 text-[20px] text-primary" aria-hidden="true">{icon}</span>
+      <div className="min-w-0">
+        <p className="text-[11px] font-medium uppercase tracking-[0.09em] text-on-surface-variant">{label}</p>
+        <div className="mt-1.5 text-[14px] font-medium leading-5 text-on-surface">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+function Status({ healthy, children }: { healthy: boolean; children: ReactNode }) {
+  return (
+    <span className={`inline-flex items-center gap-2 ${healthy ? 'text-secondary' : 'text-error'}`}>
+      <span className={`h-2 w-2 rounded-full ${healthy ? 'bg-secondary' : 'bg-error'}`} aria-hidden="true" />
+      {children}
+    </span>
+  );
+}
+
 export default function Dashboard() {
   const { data: stats, loading, error } = useApi(() => api.getDashboardStats());
   const navigate = useNavigate();
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+      <div className="flex h-64 items-center justify-center" role="status" aria-label="Loading dashboard">
+        <div className="h-7 w-7 animate-spin rounded-full border-2 border-primary/30 border-t-primary motion-reduce:animate-none" />
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="bg-error-container/20 border border-error rounded p-4 text-error">
-        Unable to connect to TrustRAG backend. Please ensure the server is running.
+      <div className="page-enter rounded-lg border border-error/30 bg-error-container/10 p-5 text-[14px] text-error" role="alert">
+        Unable to connect to TrustRAG. Check that the backend server is running.
       </div>
     );
   }
@@ -38,208 +84,109 @@ export default function Dashboard() {
   const vectorOnline = stats?.vector_db_status === 'online';
 
   return (
-    <div className="max-w-[1400px]">
-      <PageHeader breadcrumb={<>/ workspace / <span className="text-primary font-bold">dashboard</span></>} />
+    <div className="page-enter mx-auto max-w-[1440px]">
+      <PageHeader breadcrumb={<>Workspace <span className="px-2 text-outline">/</span><span className="font-medium text-on-surface">Dashboard</span></>} />
 
-      {/* Hero Header Section */}
-      <section className="mb-8">
-        <div className="flex items-center space-x-3 mb-4">
-          <span className="text-[11px] leading-[16px] tracking-[0.05em] font-bold text-primary px-2 py-0.5 bg-primary/10 border border-primary/20 rounded">
-            TRUSTED AI
-          </span>
-          <span className="w-12 h-[1px] bg-outline-variant" aria-hidden="true"></span>
-        </div>
-        <h1 className="text-[32px] leading-[40px] tracking-[-0.02em] font-bold text-on-surface mb-4">
+      <section className="pb-8 pt-3 sm:pb-9" aria-labelledby="dashboard-title">
+        <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-primary">Trusted AI</p>
+        <h1 id="dashboard-title" className="max-w-4xl text-[28px] font-semibold leading-tight tracking-[-0.035em] text-on-surface sm:text-[34px]">
           Secure Retrieval-Augmented Generation
         </h1>
-        <p className="text-[14px] leading-[20px] text-on-surface-variant max-w-2xl">
-          TrustRAG bridges the gap between massive document repositories and secure LLM responses through cryptographically verified retrieval and robust isolation mechanisms.
+        <p className="mt-3 max-w-2xl text-[14px] leading-6 text-on-surface-variant sm:text-[15px]">
+          Verified document retrieval and trust-aware controls for secure LLM responses.
         </p>
       </section>
 
-      {/* Key Metrics (Bento Grid Style) */}
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-8">
-        {/* Documents Indexed */}
-        <div className="bg-surface-container border border-outline-variant p-4 flex flex-col justify-between">
-          <span className="text-[11px] leading-[16px] tracking-[0.05em] font-bold text-on-surface-variant uppercase">
-            DOCUMENTS INDEXED
-          </span>
-          <div className="mt-4 flex items-baseline space-x-2">
-            <span className="text-[24px] leading-[32px] font-semibold text-primary">
-              {stats?.documents_indexed ?? 0}
-            </span>
-            <span className="text-[12px] leading-[16px] text-secondary">LIVE</span>
+      <section aria-label="Knowledge base metrics" className="grid grid-cols-1 gap-x-5 sm:grid-cols-2 xl:grid-cols-5 xl:border-y xl:border-outline-variant/70">
+        <Metric label="Documents indexed" icon="description">
+          <span className="mr-2 text-[22px] font-semibold tracking-tight">{stats?.documents_indexed ?? 0}</span>
+          <span className="text-[12px] font-normal text-secondary">Live</span>
+        </Metric>
+        <Metric label="Chunks stored" icon="database">
+          <span className="text-[22px] font-semibold tracking-tight">{(stats?.chunks_stored ?? 0).toLocaleString()}</span>
+        </Metric>
+        <Metric label="Vector database" icon="storage">
+          {vectorOnline ? 'ChromaDB' : 'Offline'}
+        </Metric>
+        <Metric label="Embedding model" icon="memory">
+          <span className="break-words">{stats?.embedding_model ?? 'EmbeddingGemma-300M'}</span>
+        </Metric>
+        <Metric label="RAG engine" icon="monitor_heart">
+          <Status healthy={ragOperational}>{ragOperational ? 'Operational' : 'Unavailable'}</Status>
+        </Metric>
+      </section>
+
+      <section className="py-8 sm:py-9" aria-labelledby="pipeline-title">
+        <div className="mb-6 flex items-center gap-3">
+          <span className="material-symbols-outlined text-[21px] text-primary" aria-hidden="true">account_tree</span>
+          <div>
+            <h2 id="pipeline-title" className="text-[17px] font-semibold text-on-surface">RAG pipeline</h2>
+            <p className="mt-1 text-[13px] text-on-surface-variant">Document processing through secure response generation</p>
           </div>
         </div>
 
-        {/* Chunks Stored */}
-        <div className="bg-surface-container border border-outline-variant p-4 flex flex-col justify-between">
-          <span className="text-[11px] leading-[16px] tracking-[0.05em] font-bold text-on-surface-variant uppercase">
-            CHUNKS STORED
-          </span>
-          <div className="mt-4">
-            <span className="text-[24px] leading-[32px] font-semibold text-on-surface">
-              {(stats?.chunks_stored ?? 0).toLocaleString()}
-            </span>
-          </div>
-        </div>
-
-        {/* Vector DB */}
-        <div className="bg-surface-container border border-outline-variant p-4 flex flex-col justify-between">
-          <span className="text-[11px] leading-[16px] tracking-[0.05em] font-bold text-on-surface-variant uppercase">
-            VECTOR DATABASE
-          </span>
-          <div className="mt-4 flex items-center space-x-2">
-            <span className="material-symbols-outlined text-primary" aria-hidden="true">database</span>
-            <span className="text-[14px] leading-[20px] font-medium">{vectorOnline ? 'ChromaDB' : 'Offline'}</span>
-          </div>
-        </div>
-
-        {/* Embedding Model */}
-        <div className="bg-surface-container border border-outline-variant p-4 flex flex-col justify-between">
-          <span className="text-[11px] leading-[16px] tracking-[0.05em] font-bold text-on-surface-variant uppercase">
-            EMBEDDING MODEL
-          </span>
-          <div className="mt-4">
-            <span className="text-[14px] leading-[20px] font-medium text-tertiary">
-              {stats?.embedding_model ?? 'EmbeddingGemma-300M'}
-            </span>
-          </div>
-        </div>
-
-        {/* RAG Engine Status */}
-        <div className="bg-surface-container border border-outline-variant p-4 flex flex-col justify-between">
-          <span className="text-[11px] leading-[16px] tracking-[0.05em] font-bold text-on-surface-variant uppercase">
-            RAG ENGINE
-          </span>
-          <div className="mt-4 flex items-center space-x-2">
-            <span className={`w-2.5 h-2.5 rounded-full ${ragOperational ? 'bg-secondary' : 'bg-error'}`}></span>
-            <span className={`text-[14px] leading-[20px] font-medium ${ragOperational ? 'text-secondary' : 'text-error'}`}>
-              {ragOperational ? 'Operational' : 'Unavailable'}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* Pipeline Visualization */}
-      <div className="bg-surface-container border border-outline-variant p-6 mb-8">
-        <div className="flex items-center space-x-3 mb-6">
-          <span className="material-symbols-outlined text-primary" aria-hidden="true">account_tree</span>
-          <h2 className="text-[18px] leading-[24px] font-semibold text-on-surface">RAG Pipeline</h2>
-        </div>
-
-        <div className="flex items-center justify-between gap-2 overflow-x-auto pb-2">
-          {pipelineSteps.map((step, i) => (
-            <div key={step.label} className="flex items-center">
-              <div className="flex flex-col items-center gap-3 min-w-[90px]">
-                <div className="w-14 h-14 rounded bg-surface-container-high border border-outline-variant flex items-center justify-center">
-                  <span className="material-symbols-outlined text-on-surface-variant" aria-hidden="true">{step.icon}</span>
-                </div>
-                <span className="text-[12px] font-medium text-on-surface-variant text-center">
-                  {step.label}
-                </span>
-              </div>
-              {i < pipelineSteps.length - 1 && (
-                <div className="flex items-center mx-1 mt-[-20px]">
-                  <div className="w-8 h-px bg-outline-variant" />
-                  <div className="w-0 h-0 border-t-[5px] border-t-transparent border-b-[5px] border-b-transparent border-l-[6px] border-l-outline-variant" />
-                </div>
-              )}
-            </div>
+        <div className="hidden items-start justify-between gap-2 xl:flex" role="list" aria-label="RAG pipeline stages">
+          {pipelineSteps.map((step, index) => (
+            <Fragment key={step.label}>
+              <PipelineNode step={step} index={index} />
+              {index < pipelineSteps.length - 1 && <FlowArrow direction="forward" />}
+            </Fragment>
           ))}
         </div>
-
-        {/* Security Layer */}
-        <div className="mt-6 p-4 border border-dashed border-outline-variant rounded bg-surface-dim">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <span className="material-symbols-outlined text-secondary" aria-hidden="true">shield</span>
-              <div>
-                <span className="text-[11px] leading-[16px] tracking-[0.05em] font-bold text-secondary uppercase">
-                  TrustRAG Security Layer
-                </span>
-                <p className="text-[14px] leading-[20px] text-on-surface-variant mt-1">
-                  Active defense-in-depth: Ed25519 signature verification, SHA-256 integrity, poison &amp; injection
-                  detection, trust evaluation, and RBAC-filtered retrieval.
-                </p>
-              </div>
-            </div>
-            <span className="text-[11px] leading-[16px] tracking-[0.05em] font-bold text-secondary px-3 py-1 border border-secondary/40 rounded">
-              ACTIVE
-            </span>
+        <div className="space-y-7 xl:hidden" role="list" aria-label="RAG pipeline stages">
+          <div className="flex items-center justify-between gap-1">
+            {pipelineSteps.slice(0, 4).map((step, index) => (
+              <Fragment key={step.label}>
+                <PipelineNode step={step} index={index} turnDown={index === 3} />
+                {index < 3 && <FlowArrow direction="forward" />}
+              </Fragment>
+            ))}
           </div>
-        </div>
-      </div>
-
-      {/* Bottom Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Pipeline Components */}
-        <div className="lg:col-span-2 bg-surface-container border border-outline-variant p-6">
-          <h3 className="text-[11px] leading-[16px] tracking-[0.05em] font-bold text-on-surface-variant uppercase mb-4">
-            PIPELINE COMPONENTS
-          </h3>
-          <div className="space-y-3 font-mono text-[12px] leading-[16px]">
-            <div className="flex items-center justify-between">
-              <span className="text-on-surface-variant">Vector Database</span>
-              <span className="text-secondary">{vectorOnline ? 'ONLINE' : 'OFFLINE'}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-on-surface-variant">RAG Pipeline</span>
-              <span className="text-secondary">{ragOperational ? 'OPERATIONAL' : 'DEGRADED'}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-on-surface-variant">LLM Provider</span>
-              <span className="text-secondary">{stats?.llm_provider ?? 'OpenRouter'} ({stats?.llm_model ?? 'Not configured'})</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-on-surface-variant">Embedding Model</span>
-              <span className="text-on-surface-variant">{stats?.embedding_model ?? 'EmbeddingGemma-300M'}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-on-surface-variant">Documents Indexed</span>
-              <span className="text-on-surface-variant">{stats?.documents_indexed ?? 0}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-on-surface-variant">Chunks Stored</span>
-              <span className="text-on-surface-variant">{(stats?.chunks_stored ?? 0).toLocaleString()}</span>
-            </div>
+          <div className="flex flex-row-reverse items-center justify-between gap-1">
+            {pipelineSteps.slice(4).map((step, index) => (
+              <Fragment key={step.label}>
+                <PipelineNode step={step} index={index + 4} />
+                {index < 3 && <FlowArrow direction="back" />}
+              </Fragment>
+            ))}
           </div>
         </div>
 
-        {/* Quick Actions */}
-        <div className="bg-surface-container border border-outline-variant p-6">
-          <h3 className="text-[11px] leading-[16px] tracking-[0.05em] font-bold text-on-surface-variant uppercase mb-4">
-            QUICK ACTIONS
-          </h3>
-          <div className="space-y-3">
-            <button
-              type="button"
-              onClick={() => navigate('/documents')}
-              className="w-full flex items-center justify-center space-x-2 bg-primary hover:bg-primary/90 text-on-primary py-3 px-4 rounded font-medium transition-colors"
-            >
-              <span className="material-symbols-outlined" aria-hidden="true">upload</span>
-              <span>Upload New Document</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => navigate('/chat')}
-              className="w-full flex items-center justify-center space-x-2 bg-transparent border border-outline-variant hover:bg-surface-variant text-on-surface py-3 px-4 rounded font-medium transition-colors"
-            >
-              <span className="material-symbols-outlined" aria-hidden="true">search</span>
-              <span>Query Knowledge Base</span>
-            </button>
+        <div className="mt-7 flex flex-col gap-4 border-t border-outline-variant/70 pt-5 sm:flex-row sm:items-center">
+          <img src="/trustrag-mark.png" alt="" aria-hidden="true" className="h-9 w-9 shrink-0 object-contain" />
+          <div className="min-w-0 flex-1">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-secondary">TrustRAG security layer</p>
+            <p className="mt-1 max-w-4xl text-[13px] leading-5 text-on-surface-variant">
+              Ed25519 signature verification, SHA-256 integrity, poison and injection detection, trust evaluation, and RBAC-filtered retrieval.
+            </p>
           </div>
-          <div className="mt-6">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-[14px] leading-[20px] text-on-surface-variant">Backend Connectivity</span>
-              <span className="text-[14px] leading-[20px] font-medium text-secondary">Healthy</span>
-            </div>
-            <div className="w-full h-2 bg-surface-variant rounded">
-              <div className="h-full bg-secondary rounded" style={{ width: '100%' }}></div>
-            </div>
+          <Status healthy={true}>Active</Status>
+        </div>
+      </section>
+
+      <section className="grid gap-8 border-t border-outline-variant/70 py-7 lg:grid-cols-[1fr_auto] lg:items-center" aria-label="System details and quick actions">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <p className="text-[11px] font-medium uppercase tracking-[0.09em] text-on-surface-variant">LLM provider</p>
+            <p className="mt-1 text-[13px] font-medium text-on-surface">{stats?.llm_provider ?? 'OpenRouter'}</p>
+          </div>
+          <div>
+            <p className="text-[11px] font-medium uppercase tracking-[0.09em] text-on-surface-variant">Answer model</p>
+            <p className="mt-1 break-all text-[13px] font-medium text-on-surface">{stats?.llm_model ?? 'Not configured'}</p>
           </div>
         </div>
-      </div>
+
+        <div className="flex flex-wrap gap-3">
+          <button type="button" onClick={() => navigate('/documents')} className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-[13px] font-medium text-on-primary transition-all hover:-translate-y-px hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background">
+            <span className="material-symbols-outlined text-[18px]" aria-hidden="true">upload_file</span>
+            Add document
+          </button>
+          <button type="button" onClick={() => navigate('/chat')} className="inline-flex items-center gap-2 rounded-lg border border-outline-variant px-4 py-2.5 text-[13px] font-medium text-on-surface transition-all hover:-translate-y-px hover:bg-surface-container-high focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background">
+            <span className="material-symbols-outlined text-[18px]" aria-hidden="true">chat</span>
+            Open RAG chat
+          </button>
+        </div>
+      </section>
     </div>
   );
 }

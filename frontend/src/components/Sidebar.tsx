@@ -1,15 +1,15 @@
-import { NavLink } from 'react-router-dom';
+import { Link, NavLink } from 'react-router-dom';
 import { api, logout } from '../services/api';
 import { useApi } from '../hooks/useApi';
 
 const navItems = [
-  { to: '/', label: 'DASHBOARD', icon: 'dashboard' },
-  { to: '/documents', label: 'DOCUMENTS', icon: 'description' },
-  { to: '/chat', label: 'RAG CHAT', icon: 'chat_bubble' },
-  { to: '/evaluation', label: 'SECURITY BENCHMARK', icon: 'verified_user' },
-  { to: '/audit', label: 'AUDIT LOG', icon: 'receipt_long' },
-  { to: '/knowledge', label: 'KNOWLEDGE BASE', icon: 'database' },
-  { to: '/status', label: 'SYSTEM STATUS', icon: 'analytics' },
+  { to: '/', label: 'Dashboard', icon: 'dashboard' },
+  { to: '/documents', label: 'Documents', icon: 'description' },
+  { to: '/chat', label: 'RAG chat', icon: 'chat_bubble' },
+  { to: '/evaluation', label: 'Security benchmark', icon: 'verified_user' },
+  { to: '/audit', label: 'Audit log', icon: 'receipt_long' },
+  { to: '/knowledge', label: 'Knowledge base', icon: 'database' },
+  { to: '/status', label: 'System status', icon: 'analytics' },
 ];
 
 interface SidebarProps {
@@ -36,16 +36,17 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
       )}
 
       <aside
-        className={`fixed left-0 top-0 h-full w-[260px] bg-surface-container border-r border-outline-variant flex flex-col py-4 z-50 transition-transform duration-200 lg:translate-x-0 ${
+        className={`fixed left-0 top-0 z-50 flex h-full w-[232px] flex-col border-r border-outline-variant/70 bg-background py-4 transition-transform duration-200 motion-reduce:transition-none lg:translate-x-0 ${
           open ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
         {/* Logo */}
-        <div className="px-6 mb-6">
+        <div className="mb-6 px-5">
           <div className="flex items-center justify-between">
-            <h1 className="text-[24px] leading-[32px] font-bold text-primary">
-              TrustRAG
-            </h1>
+            <Link to="/" aria-label="TrustRAG dashboard" className="flex items-center gap-2.5 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+              <img src="/trustrag-mark.png" alt="" aria-hidden="true" className="h-8 w-8 object-contain" />
+              <span className="text-[19px] font-semibold tracking-[-0.035em] text-on-surface">Trust<span className="text-primary">RAG</span></span>
+            </Link>
             <button
               type="button"
               onClick={onClose}
@@ -55,22 +56,22 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
               close
             </button>
           </div>
-          <p className="text-[12px] leading-[16px] text-on-surface-variant opacity-70 mt-0.5">
-            Enterprise Security v2.0
+          <p className="ml-[42px] mt-1 text-[11px] leading-4 text-on-surface-variant">
+            Secure knowledge workspace
           </p>
         </div>
 
-        <div className="px-6 mb-6">
-          <div className="p-3 rounded-lg bg-surface-variant/40 border border-outline-variant/60 flex items-center justify-between">
+        <div className="mb-5 border-b border-outline-variant/70 px-5 pb-5">
+          <div className="flex items-center justify-between">
             <div className="min-w-0 pr-2">
-              <p className="text-[13px] font-semibold text-on-surface truncate">{currentUser?.full_name ?? 'User'}</p>
-              <p className="text-[11px] font-mono text-primary uppercase font-medium">{currentUser?.role ?? 'Role'}</p>
+              <p className="truncate text-[12px] font-medium text-on-surface">{currentUser?.full_name ?? 'User'}</p>
+              <p className="mt-0.5 text-[11px] text-on-surface-variant">{currentUser?.role ?? 'Role'}</p>
             </div>
             <button
               onClick={logout}
               title="Sign out"
               aria-label="Sign out"
-              className="p-1.5 hover:bg-surface-variant rounded text-on-surface-variant hover:text-error transition-colors flex items-center justify-center"
+              className="flex items-center justify-center rounded-md p-2 text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-error"
             >
               <span className="material-symbols-outlined text-[18px]">logout</span>
             </button>
@@ -78,7 +79,7 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 space-y-1" aria-label="Main navigation">
+        <nav className="flex-1 space-y-1 px-3" aria-label="Main navigation">
           {navItems
             .filter((item) => item.to !== '/audit' || canViewAudit)
             .map((item) => (
@@ -88,23 +89,21 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
                 end={item.to === '/'}
                 onClick={onClose}
                 className={({ isActive }) =>
-                  `flex items-center px-6 py-3 transition-all duration-150 ease-in-out ${
+                  `flex items-center gap-3 rounded-md border-l-2 px-3 py-2.5 text-[13px] transition-colors duration-150 ease-out ${
                     isActive
-                      ? 'bg-surface-variant text-primary border-l-2 border-primary'
-                      : 'text-on-surface-variant font-medium hover:bg-surface-variant hover:text-on-surface'
+                      ? 'border-primary bg-surface-container text-on-surface'
+                      : 'border-transparent text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface'
                   }`
                 }
               >
-                <span className="material-symbols-outlined mr-3" aria-hidden="true">{item.icon}</span>
-                <span className="text-[11px] leading-[16px] tracking-[0.05em] font-bold uppercase">
-                  {item.label}
-                </span>
+                <span className="material-symbols-outlined text-[19px]" aria-hidden="true">{item.icon}</span>
+                <span className="font-medium">{item.label}</span>
               </NavLink>
             ))}
         </nav>
 
         {/* Footer */}
-        <div className="px-6 pt-4 border-t border-outline-variant space-y-3">
+        <div className="space-y-3 border-t border-outline-variant/70 px-5 pt-4">
           <div className="flex items-center text-on-surface-variant">
             <span className="material-symbols-outlined text-[18px] mr-2" aria-hidden="true">verified_user</span>
             <span className="text-[12px] leading-[16px]">Security Engine Active</span>
