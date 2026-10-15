@@ -11,7 +11,6 @@ from backend.security.auth import create_jwt_token
     ("GET", "/dashboard/stats"),
     ("GET", "/status"),
     ("GET", "/auth/me"),
-    ("GET", "/evaluation/run"),
     ("POST", "/evaluation/run"),
 ])
 @pytest.mark.parametrize("credential", [None, "invalid", "expired", "valid"])

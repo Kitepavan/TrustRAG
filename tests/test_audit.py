@@ -36,7 +36,7 @@ def test_query_trace_and_audit_access(monkeypatch):
         "sha256": "digest", "integrity_ok": True, "trust_status": "Trusted",
         "access_level": "PUBLIC" if doc == "public" else "HR_CONFIDENTIAL",
     } for doc in docs})
-    monkeypatch.setattr(query, "generate_answer", lambda *_: "Calendar answer")
+    monkeypatch.setattr(query, "generate_answer", lambda *_args, **_kwargs: "Calendar answer")
     with TestClient(app) as client:
         response = client.post("/query", headers=headers("emp_user"), json={"question": "private query must not be logged"})
         assert response.status_code == 200

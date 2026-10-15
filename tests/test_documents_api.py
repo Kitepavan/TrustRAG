@@ -140,7 +140,10 @@ def test_delete_document_removes_file_metadata_provenance_and_chunks():
         "document_id": document_id,
     }])
 
-    response = documents.delete_document(document_id, user={"username": "admin", "role": "Admin"})
+    response = documents.delete_document(document_id, user={
+        "username": "admin", "role": "Admin",
+        "clearance_tags": ["PUBLIC", "INTERNAL", "HR_CONFIDENTIAL", "IT_SEC_CONFIDENTIAL", "RESTRICTED"],
+    })
 
     assert response == {"document_id": document_id, "deleted": True}
     assert not (documents.UPLOAD_DIR / stored_name).exists()
@@ -157,3 +160,30 @@ def test_delete_document_requires_privileged_role():
     with pytest.raises(HTTPException) as error:
         documents.delete_document("DOC-DELETE-TEST", user={"username": "emp_user", "role": "Employee"})
     assert error.value.status_code == 403
+
+
+def test_delete_document_requires_clearance_for_classification():
+    import pytest
+    import backend.api.documents as documents
+    from fastapi import HTTPException
+
+    document_id = "DOC-CLEARANCE-TEST"
+    stored_name = f"{document_id}.txt"
+    (documents.UPLOAD_DIR / stored_name).write_text("hr data", encoding="utf-8")
+    documents.save_metadata_store({
+        document_id: {
+            "document_id": document_id,
+            "filename": "hr.txt",
+            "stored_filename": stored_name,
+            "access_level": "HR_CONFIDENTIAL",
+            "trust_status": "Trusted",
+        }
+    })
+
+    it_security = {"username": "sec_admin", "role": "IT_Security",
+                   "clearance_tags": ["PUBLIC", "INTERNAL", "IT_SEC_CONFIDENTIAL"]}
+    with pytest.raises(HTTPException) as error:
+        documents.delete_document(document_id, user=it_security)
+    assert error.value.status_code == 403
+    assert (documents.UPLOAD_DIR / stored_name).exists()
+    assert document_id in documents.get_metadata_store()

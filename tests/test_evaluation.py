@@ -37,3 +37,6 @@ def test_security_benchmark_reports_classifier_unavailable(monkeypatch):
     scenario = next(item for item in result["scenarios"] if item["scenario"] == "Indirect Prompt Injection")
     assert scenario["classifier_status"] == "unavailable"
     assert scenario["trustrag_result"] == "BLOCKED (Classifier unavailable)"
+    # Fail-closed blocking still occurs, but an unavailable classifier is not a detection.
+    assert scenario["trustrag_passed"] is False
+    assert result["summary"]["prompt_injection_block_rate"] == 0.0

@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api } from '../services/api';
 import { useApi } from '../hooks/useApi';
 import FileUpload from '../components/FileUpload';
@@ -19,6 +19,10 @@ export default function Documents() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const uploadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => () => {
+    if (uploadTimerRef.current) clearTimeout(uploadTimerRef.current);
+  }, []);
 
   const handleUpload = async (file: File) => {
     const result = await api.uploadDocument(file, accessLevel, signature || undefined);

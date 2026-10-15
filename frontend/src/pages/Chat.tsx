@@ -27,6 +27,7 @@ export default function Chat() {
   // Admin / IT_Security; the button is only offered to those roles.
   const { data: currentUser } = useApi(() => api.getCurrentUser(), []);
   const canRunBaseline = currentUser?.role === 'Admin' || currentUser?.role === 'IT_Security';
+  const { data: stats } = useApi(() => api.getDashboardStats(), []);
 
   useEffect(() => {
     if (mode === 'baseline' && !canRunBaseline) {
@@ -111,7 +112,7 @@ export default function Chat() {
             <div className="flex items-center space-x-2">
               <div className="hidden sm:flex items-center space-x-1.5 px-2.5 py-1 bg-surface-container border border-outline-variant rounded text-[11px] text-on-surface-variant font-mono">
                 <span className="w-2 h-2 rounded-full bg-secondary"></span>
-                <span>OpenRouter · nemotron-3.5</span>
+                <span>OpenRouter · {stats?.llm_model?.split('/').pop() ?? 'model pending'}</span>
               </div>
               <div className="flex items-center space-x-2 bg-surface-container p-1 rounded-lg border border-outline-variant">
                 <button

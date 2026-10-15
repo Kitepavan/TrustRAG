@@ -1,3 +1,6 @@
+import httpx
+import pytest
+
 from backend.rag import llm
 
 
@@ -61,3 +64,40 @@ def test_baseline_generation_omits_trust_labels_and_secure_guardrails(monkeypatc
     assert "Security Status" not in user_prompt
     assert "<trusted_context>" not in user_prompt
     assert "MFA is no longer required" in user_prompt
+
+
+def test_permanent_client_error_fails_fast_without_retry(monkeypatch):
+    calls = {"count": 0}
+
+    class _RejectedResponse:
+        status_code = 401
+
+        def raise_for_status(self):
+            raise httpx.HTTPStatusError(
+                "unauthorized",
+                request=httpx.Request("POST", "https://openrouter.ai/api/v1/chat/completions"),
+                response=httpx.Response(401),
+            )
+
+    class _RejectingClient:
+        def __init__(self, **_kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            pass
+
+        def post(self, _url, **_kwargs):
+            calls["count"] += 1
+            return _RejectedResponse()
+
+    monkeypatch.setattr(llm, "_get_api_key", lambda: "test-key")
+    monkeypatch.setattr(llm.httpx, "Client", _RejectingClient)
+    # A retry would sleep; fail loudly if the permanent-4xx path retries.
+    monkeypatch.setattr(llm.time, "sleep", lambda _seconds: pytest.fail("retried a permanent 401"))
+
+    with pytest.raises(httpx.HTTPStatusError):
+        llm.generate_answer("Is MFA required?", [_quarantined_chunk()], mode="secure")
+    assert calls["count"] == 1

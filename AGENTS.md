@@ -157,7 +157,7 @@ TrustRAG/
 
 ## 7. Latest verified handoff — September 17, 2026
 
-- Full pytest suite: **68 passed, 1 warning** (Starlette TestClient/httpx deprecation). Frontend build passed; lint reported zero errors/warnings. No live provider or browser acceptance test was run in the documentation pass.
+- Full pytest suite: **140 passed, 1 warning** (Starlette TestClient/httpx deprecation); re-verified October 15, 2026 after a fix pass (deletion clearance check, evaluation detection metric, LLM 4xx fail-fast, request-local verification cache, demo-status endpoint, POST-only `/evaluation/run`). Frontend build passed; lint reported zero errors/warnings. No live provider or browser acceptance test was run in the documentation pass.
 - Server recovery earlier in this session: suspended processes were replaced; `/health`, frontend HTTP 200 and employee demo login succeeded. Demo mode was enabled locally; provider key was empty at that check. Do not assume those processes remain running or that HTTP 200 proves LLM generation.
 - Current setup and limitations: [README.md](README.md), [PROGRESS.md](PROGRESS.md), [PROJECT_REPORT.md](PROJECT_REPORT.md). The lower section of `TRUSTRAG_PROJECT_CONTEXT.md` is preserved historical material, not current setup guidance.
 - Honor the user's explicit constraint: do not use OpenCode/opencode-orchestrator for implementation.

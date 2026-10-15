@@ -55,11 +55,24 @@ def _contradiction_cue(claim: str, neighbour_text: str) -> bool:
     return bool(claim_nums and neighbour_nums and claim_nums.isdisjoint(neighbour_nums))
 
 
+def _verified_neighbors(
+    document_ids: list[str], cache: dict[str, dict | None] | None
+) -> dict[str, dict | None]:
+    """Verify documents, reusing a request-local cache across retrieval rescans."""
+    if cache is None:
+        return verified_documents(document_ids)
+    missing = [document_id for document_id in document_ids if document_id not in cache]
+    if missing:
+        cache.update(verified_documents(missing))
+    return {document_id: cache.get(document_id) for document_id in document_ids}
+
+
 def scan_for_consensus_contradiction(
     text: str,
     exclude_document_id: str | None = None,
     embed_fn: Callable | None = None,
     query_fn: Callable | None = None,
+    verified_cache: dict[str, dict | None] | None = None,
 ) -> dict[str, Any]:
     """Return trust-weighted contradiction evidence from distinct verified documents."""
     claims = sorted(
@@ -111,10 +124,12 @@ def scan_for_consensus_contradiction(
                 neighbor_ids.append(document_id)
 
     try:
-        verified = verified_documents(list(dict.fromkeys(neighbor_ids)))
+        verified = _verified_neighbors(list(dict.fromkeys(neighbor_ids)), verified_cache)
     except Exception:
         return _result("unavailable", ["NEIGHBOR_VERIFICATION_FAILED"], complete=False)
 
+    # Hash repeated neighbor texts once per scan instead of once per claim.
+    text_digests: dict[str, str] = {}
     for claim, neighbors in queried_claims:
         # Keep only the best matching chunk per document; a source gets one vote.
         by_document: dict[str, dict[str, Any]] = {}
@@ -131,8 +146,13 @@ def scan_for_consensus_contradiction(
             record = verified.get(document_id)
             chunk_text = neighbor.get("text", "")
             if (not record or not record.get("integrity_ok") or
-                    metadata.get("sha256") != record.get("sha256") or
-                    metadata.get("text_sha256") != compute_sha256_str(chunk_text)):
+                    metadata.get("sha256") != record.get("sha256")):
+                continue
+            text_sha256 = text_digests.get(chunk_text)
+            if text_sha256 is None:
+                text_sha256 = compute_sha256_str(chunk_text)
+                text_digests[chunk_text] = text_sha256
+            if metadata.get("text_sha256") != text_sha256:
                 continue
             trust_status = record.get("trust_status")
             if trust_status not in {"Trusted", "Suspicious"}:
@@ -173,6 +193,7 @@ def scan_chunk_for_contradiction(
     exclude_document_id: str | None = None,
     embed_fn: Callable | None = None,
     query_fn: Callable | None = None,
+    verified_cache: dict[str, dict | None] | None = None,
 ) -> dict[str, Any]:
     """Retrieval-time rescan for a single chunk; skips tiny chunks and itself."""
     if not text or len(text) < 40:
@@ -182,4 +203,5 @@ def scan_chunk_for_contradiction(
         exclude_document_id=exclude_document_id,
         embed_fn=embed_fn,
         query_fn=query_fn,
+        verified_cache=verified_cache,
     )

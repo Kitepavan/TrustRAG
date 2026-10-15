@@ -10,8 +10,11 @@ from backend.security.evaluation import SecurityEvaluator
 router = APIRouter(prefix="/evaluation", tags=["evaluation"], dependencies=[Depends(get_current_user_required)])
 
 
-@router.get("/run")
 @router.post("/run")
 def run_evaluation():
-    """Run synthetic component security checks (not an end-to-end benchmark)."""
+    """Run synthetic component security checks (not an end-to-end benchmark).
+
+    POST-only: the run performs an external classifier call, which must not be
+    triggered by safe/idempotent GET semantics.
+    """
     return SecurityEvaluator.run_benchmark_suite()

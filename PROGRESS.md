@@ -77,7 +77,7 @@ Both development servers were found stopped/suspended (process state `T`). They 
 
 The OpenRouter threshold calibration script is `scripts/evaluate_injection_detector.py`. Live evaluation selected `0.5101005014718472` by development-set F1, choosing the lower threshold when scores tie to favor recall. On the separate six-case synthetic holdout, Mercury Decide produced 3 TP, 0 FP, 3 TN and 0 FN. Per-case scores and limits are recorded in [the evaluation report](docs/evaluations/2026-10-15-mercury-decide-injection-evaluation.md). The corpus is small and curated, so this is only an initial result, not a general performance claim. Offline contract and integration tests use mocked responses, not real model predictions.
 
-Focused detector, trust-engine, ingestion, retrieval, evaluation and labeled-corpus tests pass. The full suite did not complete in this environment: `TestClient` hung on a simple local `/` request before returning a response. Frontend files were not changed in this pass.
+Focused detector, trust-engine, ingestion, retrieval, evaluation and labeled-corpus tests pass, and the full suite completes: **140 passed**, 1 warning (Starlette TestClient/httpx deprecation). Frontend build and lint pass.
 
 ## Remaining work and limitations
 

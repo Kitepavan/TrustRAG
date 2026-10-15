@@ -90,6 +90,7 @@ def generate_answer(
 
     api_key = _get_api_key()
 
+    last_error: Exception | None = None
     for attempt in range(1, max_retries + 1):
         try:
             with httpx.Client(timeout=30.0) as client:
@@ -104,19 +105,29 @@ def generate_answer(
                     },
                 )
 
-                if resp.status_code == 429 and attempt < max_retries:
-                    wait_time = attempt * 1.5
-                    logger.warning(f"OpenRouter rate limited (429). Retrying in {wait_time}s (attempt {attempt}/{max_retries})...")
-                    time.sleep(wait_time)
-                    continue
+            if resp.status_code == 429 and attempt < max_retries:
+                wait_time = attempt * 1.5
+                logger.warning(f"OpenRouter rate limited (429). Retrying in {wait_time}s (attempt {attempt}/{max_retries})...")
+                time.sleep(wait_time)
+                continue
 
-                resp.raise_for_status()
-                return resp.json()["choices"][0]["message"]["content"].strip()
-        except Exception as e:
+            resp.raise_for_status()
+            return resp.json()["choices"][0]["message"]["content"].strip()
+        except httpx.HTTPStatusError as error:
+            # Permanent client errors (invalid key, malformed request) cannot succeed
+            # on retry; surface them instead of degrading to a misleading fallback.
+            if 400 <= error.response.status_code < 500 and error.response.status_code != 429:
+                logger.error(f"OpenRouter rejected the request with HTTP {error.response.status_code}; not retrying: {error}")
+                raise
+            last_error = error
             if attempt < max_retries:
                 time.sleep(1.0 * attempt)
-            else:
-                logger.error(f"OpenRouter API call failed after {max_retries} attempts: {e}")
+        except Exception as error:
+            last_error = error
+            if attempt < max_retries:
+                time.sleep(1.0 * attempt)
+
+    logger.error(f"OpenRouter API call failed after {max_retries} attempts: {last_error}")
 
     # Degraded-mode fallback: LLM unreachable, so surface the retrieved context with
     # an explicit notice rather than silently impersonating a model answer.

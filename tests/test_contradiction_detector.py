@@ -273,3 +273,35 @@ def test_chunk_scan_passes_self_exclusion_to_consensus(monkeypatch):
     monkeypatch.setattr(detector, "scan_for_consensus_contradiction", capture)
     detector.scan_chunk_for_contradiction("A long enough source claim with sufficient text.", exclude_document_id="DOC-SELF")
     assert captured["exclude_document_id"] == "DOC-SELF"
+
+
+def test_shared_verified_cache_verifies_each_document_once(monkeypatch):
+    verify_calls = []
+
+    def counting_verified(document_ids):
+        verify_calls.extend(document_ids)
+        return {
+            document_id: {
+                "document_id": document_id,
+                "integrity_ok": True,
+                "sha256": f"sha-{document_id}",
+                "trust_status": "Trusted",
+            }
+            for document_id in document_ids
+        }
+
+    monkeypatch.setattr(contradiction_detector, "verified_documents", counting_verified, raising=False)
+    neighbors = stub_query(
+        ["Passwords must be rotated every 90 days for all staff."],
+        document_ids=["DOC-T1"],
+    )
+    verified_cache: dict[str, dict | None] = {}
+    claim = "Passwords must be rotated every 90 days for every employee."
+    for _ in range(2):
+        result = scan_for_consensus_contradiction(
+            claim, embed_fn=embed, query_fn=neighbors, verified_cache=verified_cache,
+        )
+        assert result["decision"] == "clear"
+
+    # The second scan reused the cached verification for the same document.
+    assert verify_calls == ["DOC-T1"]

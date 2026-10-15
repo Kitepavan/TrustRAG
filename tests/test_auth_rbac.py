@@ -64,3 +64,15 @@ def test_demo_passwords_disabled_without_demo_mode(monkeypatch):
     monkeypatch.setenv("TRUSTRAG_PASSWORD_HASH_HR_USER", f"{salt.hex()}:{digest}")
     assert authenticate_user("hr_user", "S3cure!") is not None
     assert authenticate_user("hr_user", "hr123") is None
+
+
+def test_demo_status_endpoint_reflects_environment(monkeypatch):
+    # The UI hides 1-click demo login unless this endpoint reports demo mode on.
+    from fastapi.testclient import TestClient
+    from backend.main import app
+
+    client = TestClient(app)
+    monkeypatch.setenv("TRUSTRAG_DEMO_MODE", "true")
+    assert client.get("/auth/demo-status").json() == {"demo_mode": True}
+    monkeypatch.setenv("TRUSTRAG_DEMO_MODE", "false")
+    assert client.get("/auth/demo-status").json() == {"demo_mode": False}

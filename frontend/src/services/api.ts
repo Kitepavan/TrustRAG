@@ -44,7 +44,7 @@ export const api = {
   getHealth: () => request<{ status: string }>('/health'),
 
   // Authentication & Personas
-  getPersonas: () => request<Persona[]>('/auth/personas'),
+  getDemoStatus: () => request<{ demo_mode: boolean }>('/auth/demo-status'),
   getCurrentUser: () => request<Persona>('/auth/me'),
   login: async (username: string, password: string) => {
     const data = await request<{ access_token: string; user: Persona }>('/auth/login', {
@@ -87,7 +87,7 @@ export const api = {
     }),
 
   // Academic Evaluation
-  runEvaluation: () => request<EvaluationResponse>('/evaluation/run'),
+  runEvaluation: () => request<EvaluationResponse>('/evaluation/run', { method: 'POST' }),
 
   // Security Audit (Admin / IT_Security)
   getAuditEvents: (limit = 50, before?: number, eventType?: string, severity?: string) => {

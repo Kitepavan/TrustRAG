@@ -211,7 +211,8 @@ def delete_document(
     document_id: str,
     user: Dict[str, Any] = Depends(get_current_user_required),
 ):
-    """Delete a document and its indexed chunks; only Admin and IT Security may do so."""
+    """Delete a document and its indexed chunks; requires an Admin/IT Security role
+    whose clearance covers the document's classification."""
     if user.get("role") not in {"Admin", "IT_Security"}:
         raise HTTPException(status_code=403, detail="Document deletion requires Admin or IT Security clearance")
 
@@ -220,6 +221,10 @@ def delete_document(
         meta = metadata.get(document_id)
         if meta is None:
             raise HTTPException(status_code=404, detail="Document not found")
+        # Role alone must not bypass classification clearance: an IT_Security user
+        # cannot delete HR/RESTRICTED documents they are not cleared to read.
+        if not check_rbac_permission(user.get("clearance_tags", []), meta.get("access_level")):
+            raise HTTPException(status_code=403, detail="Document clearance does not permit deletion")
         stored_name = meta.get("stored_filename")
         if not isinstance(stored_name, str) or Path(stored_name).name != stored_name:
             raise HTTPException(status_code=409, detail="Document storage path is invalid")

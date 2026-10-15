@@ -37,7 +37,7 @@ class TrustEngine:
                 "is_signed": is_signed,
                 "signature_valid": signature_valid,
                 "injection_scan": {"is_injection": False, "risk_score": 0.0},
-                "poison_scan": {"is_poisoned": False, "poison_score": 0.0},
+                "poison_scan": {"is_poisoned": False, "poison_score": 0.0, "detected_anomalies": []},
             }
 
         # Layer 2: Prompt Injection Scan
@@ -56,7 +56,7 @@ class TrustEngine:
                 "is_signed": is_signed,
                 "signature_valid": signature_valid,
                 "injection_scan": injection_res,
-                "poison_scan": {"is_poisoned": False, "poison_score": 0.0},
+                "poison_scan": {"is_poisoned": False, "poison_score": 0.0, "detected_anomalies": []},
             }
 
         # Layer 3: Knowledge Poisoning Scan
@@ -123,7 +123,7 @@ class TrustEngine:
             # Unsigned document
             if poison_res["is_poisoned"]:
                 trust_category = "Quarantined"
-                trust_score = 0.1
+                trust_score = 0.0
                 policy_decision = "BLOCK"
             else:
                 trust_category = "Suspicious"

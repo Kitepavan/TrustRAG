@@ -16,7 +16,7 @@ Stage 12 provides four synthetic component checks, not a measured end-to-end
 Baseline-versus-TrustRAG attack experiment. The current checkout also includes structured
 security audit events and a seventh web page for privileged audit access.
 
-Latest verification: **68 backend tests passed** (one dependency deprecation warning),
+Latest verification: **140 backend tests passed** (one dependency deprecation warning),
 frontend build passed, and lint reported no warnings/errors. See [PROGRESS.md](PROGRESS.md)
 for the implementation history and [PROJECT_REPORT.md](PROJECT_REPORT.md) for limitations.
 
@@ -129,12 +129,13 @@ academic comparison) is gated to `Admin` / `IT_Security` and is only shown to th
 | POST | `/auth/login` | – | Exchange credentials for a JWT |
 | GET | `/auth/me` | ✅ | Current user profile (401 without a valid token) |
 | GET | `/auth/personas` | – | Persona list (no passwords) |
+| GET | `/auth/demo-status` | – | Whether demo-mode quick login is enabled |
 | POST | `/documents/upload` | ✅ | Upload and ingest a document; signature optional |
 | POST | `/documents/{id}/override` | Admin | Break-glass release of a Quarantined doc (audited; integrity failures excluded) |
 | GET | `/documents/` | ✅ | List authorized documents (+ integrity re-check) |
 | GET | `/documents/{id}` | ✅ | Get document metadata |
 | POST | `/query` | ✅ | Query the RAG pipeline (`secure` or `baseline` mode) |
-| GET/POST | `/evaluation/run` | ✅ | Run synthetic component security checks (not end-to-end) |
+| POST | `/evaluation/run` | ✅ | Run synthetic component security checks (not end-to-end) |
 | GET | `/audit/events` | Admin / IT_Security | Filtered security events with cursor pagination |
 
 ### Upload a Document
@@ -257,11 +258,10 @@ poisoning), JWT auth & RBAC (including demo-password modes), API authentication 
 baseline gating, bounded `top_k`, retrieval-time quarantine without a preceding listing,
 chunk-digest mismatch and corrupt metadata. Tests isolate file stores, keys, provenance
 and ChromaDB from real data. Audit tests cover event privacy at current call sites,
-privileged access, filtering/pagination and persistence failure. The latest run passed
-The latest detector-focused run passed 56 tests with one Starlette TestClient warning.
-The full suite did not complete in this environment because TestClient hung on a local
-`/` request. Unit tests mock the classifier; a separate live synthetic-corpus evaluation
-selected the injection threshold and is summarized in `PROJECT_REPORT.md`.
+privileged access, filtering/pagination and persistence failure. The latest full run
+passed **140 tests** with one Starlette TestClient warning. Unit tests mock the classifier;
+a separate live synthetic-corpus evaluation selected the injection threshold and is
+summarized in `PROJECT_REPORT.md`.
 
 Frontend checks:
 

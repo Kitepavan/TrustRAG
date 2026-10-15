@@ -49,6 +49,9 @@ def apply_security_filters(candidates: List[Dict[str, Any]], user: Dict[str, Any
         (key, chunk.get("text", "")) for key, chunk in eligible
     ])
 
+    # One request-local cache for neighbor verification: each document's file hash
+    # and signature are checked once per query instead of once per chunk rescan.
+    verified_cache: dict[str, dict | None] = {}
     for key, chunk in eligible:
         meta = chunk.get("metadata", {})
         injection_scan = injection_scans.get(key, {
@@ -68,7 +71,9 @@ def apply_security_filters(candidates: List[Dict[str, Any]], user: Dict[str, Any
         # Defense Filter 4: retrieval-time trust-weighted neighbor rescan.
         try:
             neighbor_result = scan_chunk_for_contradiction(
-                chunk.get("text", ""), exclude_document_id=meta.get("document_id")
+                chunk.get("text", ""),
+                exclude_document_id=meta.get("document_id"),
+                verified_cache=verified_cache,
             )
         except Exception:
             neighbor_result = {"decision": "unavailable", "complete": False}
@@ -186,8 +191,11 @@ def build_secure_context(chunks: List[Dict[str, Any]]) -> str:
     for idx, c in enumerate(chunks, start=1):
         doc_id = c.get("metadata", {}).get("document_id", "DOC-UNKNOWN")
         trust_status = c.get("metadata", {}).get("trust_status", "Suspicious")
+        # Strip delimiter literals so chunk content cannot close the untrusted-data
+        # block early (defense in depth; content is already scanned at retrieval).
+        text = c.get("text", "").replace("<trusted_context>", "").replace("</trusted_context>", "")
         context_parts.append(
-            f"[Source {idx} | ID: {doc_id} | Security Status: {trust_status}]\n{c.get('text', '')}\n"
+            f"[Source {idx} | ID: {doc_id} | Security Status: {trust_status}]\n{text}\n"
         )
     context_parts.append("</trusted_context>")
 

@@ -3,6 +3,8 @@ TrustRAG API — Authentication Router
 Endpoints for user login, current user info, and available demo persona accounts.
 """
 
+import os
+
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import List, Dict, Any
@@ -29,8 +31,12 @@ class LoginResponse(BaseModel):
 
 
 @router.post("/login", response_model=LoginResponse)
-async def login(req: LoginRequest):
-    """Log in with username and password to retrieve a JWT token."""
+def login(req: LoginRequest):
+    """Log in with username and password to retrieve a JWT token.
+
+    Sync route: the scrypt hash verification is CPU-heavy and must not block
+    the event loop (FastAPI runs sync handlers in the threadpool).
+    """
     user = authenticate_user(req.username, req.password)
     if not user:
         raise HTTPException(status_code=401, detail="Invalid username or password")
@@ -82,3 +88,13 @@ async def list_demo_personas():
         }
         for u in DEMO_USERS.values()
     ]
+
+
+@router.get("/demo-status")
+async def get_demo_status():
+    """Report whether fixed demo passwords are enabled.
+
+    Drives the 1-click demo login in the UI so it is hidden when demo mode is
+    off and those fixed passwords would fail.
+    """
+    return {"demo_mode": os.environ.get("TRUSTRAG_DEMO_MODE", "false").lower() == "true"}

@@ -1,3 +1,5 @@
+import threading
+
 import chromadb
 from backend.security.hashing import compute_sha256_str
 
@@ -5,16 +7,20 @@ DB_PATH = "data/chroma_db"
 
 _client = None
 _collection = None
+_init_lock = threading.Lock()
 
 
 def get_collection():
     global _client, _collection
     if _collection is None:
-        _client = chromadb.PersistentClient(path=DB_PATH)
-        _collection = _client.get_or_create_collection(
-            name="documents",
-            metadata={"hnsw:space": "cosine"},
-        )
+        with _init_lock:
+            # Double-checked init: concurrent first requests must not build two clients.
+            if _collection is None:
+                _client = chromadb.PersistentClient(path=DB_PATH)
+                _collection = _client.get_or_create_collection(
+                    name="documents",
+                    metadata={"hnsw:space": "cosine"},
+                )
     return _collection
 
 

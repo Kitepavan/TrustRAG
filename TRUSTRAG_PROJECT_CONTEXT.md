@@ -71,9 +71,9 @@ restarting services; resume the correct suspended job from its owning terminal w
 
 ### Fresh verification and remaining scope
 
-- Full suite: **68 passed, 1 warning**; warning is Starlette TestClient/httpx deprecation.
+- Full suite: **140 passed, 1 warning**; warning is Starlette TestClient/httpx deprecation.
 - Frontend production build passed; lint reported zero warnings and zero errors.
-- Focused protected-endpoint authentication matrix: **20 passed**.
+- Focused protected-endpoint authentication matrix: **16 passed**.
 - Checks used isolated runtime stores. No live OpenRouter or browser GUI acceptance was
   performed during this documentation update. Commands/results are in [PROGRESS.md](PROGRESS.md).
 - Remaining research: broader held-out attack/content corpus, false-positive/negative

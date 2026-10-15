@@ -8,6 +8,17 @@ export default function AuthGate({ children }: { children: ReactNode }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [demoMode, setDemoMode] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    // Quick-login uses the documented fixed demo passwords, which the backend
+    // disables unless TRUSTRAG_DEMO_MODE=true; hide it when they would fail.
+    api.getDemoStatus()
+      .then(value => { if (active) setDemoMode(value.demo_mode); })
+      .catch(() => { /* Backend without the endpoint: keep quick login hidden. */ });
+    return () => { active = false; };
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -60,36 +71,40 @@ export default function AuthGate({ children }: { children: ReactNode }) {
           </p>
         </div>
 
-        {/* Quick Demo Personas */}
-        <div className="space-y-2">
-          <span className="text-[11px] font-bold uppercase tracking-wider text-on-surface-variant block">
-            1-Click Demo Personas:
-          </span>
-          <div className="grid grid-cols-2 gap-2">
-            {demoPersonas.map((p) => (
-              <button
-                key={p.user}
-                type="button"
-                onClick={() => void handleQuickLogin(p.user, p.pass)}
-                className="p-2.5 bg-surface-variant/40 hover:bg-surface-variant border border-outline-variant/60 hover:border-primary/50 rounded-lg text-left transition-all group"
-              >
-                <div className="flex items-center space-x-2">
-                  <span className="material-symbols-outlined text-[18px] text-primary group-hover:scale-110 transition-transform">
-                    {p.icon}
-                  </span>
-                  <span className="text-[13px] font-semibold text-on-surface">{p.name}</span>
-                </div>
-                <span className="text-[10px] text-on-surface-variant block mt-0.5">{p.role}</span>
-              </button>
-            ))}
+        {/* Quick Demo Personas (only when the backend reports demo mode) */}
+        {demoMode && (
+          <div className="space-y-2">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-on-surface-variant block">
+              1-Click Demo Personas:
+            </span>
+            <div className="grid grid-cols-2 gap-2">
+              {demoPersonas.map((p) => (
+                <button
+                  key={p.user}
+                  type="button"
+                  onClick={() => void handleQuickLogin(p.user, p.pass)}
+                  className="p-2.5 bg-surface-variant/40 hover:bg-surface-variant border border-outline-variant/60 hover:border-primary/50 rounded-lg text-left transition-all group"
+                >
+                  <div className="flex items-center space-x-2">
+                    <span className="material-symbols-outlined text-[18px] text-primary group-hover:scale-110 transition-transform">
+                      {p.icon}
+                    </span>
+                    <span className="text-[13px] font-semibold text-on-surface">{p.name}</span>
+                  </div>
+                  <span className="text-[10px] text-on-surface-variant block mt-0.5">{p.role}</span>
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
-        <div className="flex items-center space-x-2 text-on-surface-variant/40">
-          <div className="flex-1 h-px bg-outline-variant"></div>
-          <span className="text-[11px] font-mono uppercase">or manual credentials</span>
-          <div className="flex-1 h-px bg-outline-variant"></div>
-        </div>
+        {demoMode && (
+          <div className="flex items-center space-x-2 text-on-surface-variant/40">
+            <div className="flex-1 h-px bg-outline-variant"></div>
+            <span className="text-[11px] font-mono uppercase">or manual credentials</span>
+            <div className="flex-1 h-px bg-outline-variant"></div>
+          </div>
+        )}
 
         {/* Manual Login Form */}
         <form
