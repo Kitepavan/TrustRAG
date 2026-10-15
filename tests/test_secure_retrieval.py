@@ -66,6 +66,9 @@ def _scan_result(decision):
 
 def test_retrieval_blocks_strong_contradiction(monkeypatch):
     import backend.rag.secure_retrieval as retrieval
+    monkeypatch.setattr(retrieval, "scan_prompt_injections", lambda items: {
+        key: {"is_injection": False, "risk_score": 0.0, "scan_status": "complete"} for key, _text in items
+    })
     monkeypatch.setattr(retrieval, "scan_chunk_for_contradiction", lambda _text, **_kwargs: _scan_result("quarantine"))
     candidate = _long_clean_candidate()
 
@@ -79,6 +82,9 @@ def test_retrieval_blocks_strong_contradiction(monkeypatch):
 
 def test_retrieval_blocks_unavailable_neighbor_check(monkeypatch):
     import backend.rag.secure_retrieval as retrieval
+    monkeypatch.setattr(retrieval, "scan_prompt_injections", lambda items: {
+        key: {"is_injection": False, "risk_score": 0.0, "scan_status": "complete"} for key, _text in items
+    })
     monkeypatch.setattr(retrieval, "scan_chunk_for_contradiction", lambda _text, **_kwargs: _scan_result("unavailable"))
     candidate = _long_clean_candidate()
 
@@ -92,6 +98,9 @@ def test_retrieval_blocks_unavailable_neighbor_check(monkeypatch):
 
 def test_retrieval_keeps_ambiguous_candidate_as_suspicious(monkeypatch):
     import backend.rag.secure_retrieval as retrieval
+    monkeypatch.setattr(retrieval, "scan_prompt_injections", lambda items: {
+        key: {"is_injection": False, "risk_score": 0.0, "scan_status": "complete"} for key, _text in items
+    })
     monkeypatch.setattr(retrieval, "scan_chunk_for_contradiction", lambda _text, **_kwargs: _scan_result("suspicious"))
     candidate = _long_clean_candidate()
 
@@ -120,6 +129,9 @@ def _run_retrieval_with_scan(monkeypatch, decision, mode="secure"):
         }
     })
     monkeypatch.setattr(retrieval, "scan_chunk_for_contradiction", lambda _text, **_kwargs: _scan_result(decision))
+    monkeypatch.setattr(retrieval, "scan_prompt_injections", lambda items: {
+        key: {"is_injection": False, "risk_score": 0.0, "scan_status": "complete"} for key, _text in items
+    })
     trace = []
     selected = retrieval.secure_retrieve_chunks(
         [0.0], {"role": "Admin", "clearance_tags": ["PUBLIC"]},
@@ -150,7 +162,23 @@ def test_baseline_retrieval_remains_unfiltered(monkeypatch):
     assert not any(item["stage"] == "BLOCKED_RETRIEVAL_NEIGHBOR_UNAVAILABLE" for item in trace)
 
 
-def test_retrieval_sanitizes_rejected_injection_quote(monkeypatch):
+def test_baseline_mode_does_not_call_semantic_detector(monkeypatch):
+    import backend.rag.secure_retrieval as retrieval
+    candidate = _long_clean_candidate()
+    monkeypatch.setattr(retrieval, "query_chunks", lambda **_kwargs: [candidate])
+    monkeypatch.setattr(
+        retrieval, "scan_prompt_injections",
+        lambda _items: (_ for _ in ()).throw(AssertionError("baseline called detector")),
+    )
+
+    result = retrieval.secure_retrieve_chunks(
+        [0.0], {"role": "Admin", "clearance_tags": ["PUBLIC"]}, mode="baseline"
+    )
+
+    assert result == [candidate]
+
+
+def test_retrieval_preserves_benign_injection_warning_text(monkeypatch):
     import backend.rag.secure_retrieval as retrieval
     candidate = {
         "chunk_id": "c-training",
@@ -159,17 +187,23 @@ def test_retrieval_sanitizes_rejected_injection_quote(monkeypatch):
         "score": 0.1,
         "metadata": {"document_id": "DOC-TRAINING", "trust_status": "Trusted", "access_level": "PUBLIC"},
     }
+    monkeypatch.setattr(retrieval, "scan_prompt_injections", lambda items: {
+        key: {"is_injection": False, "risk_score": 0.1, "scan_status": "complete"} for key, _text in items
+    })
     monkeypatch.setattr(retrieval, "scan_chunk_for_contradiction", lambda _text, **_kwargs: _scan_result("clear"))
 
     selected = retrieval.apply_security_filters([candidate], {"clearance_tags": ["PUBLIC"]})
 
     assert selected == [candidate]
-    assert "ignore all previous instructions" not in selected[0]["text"].lower()
-    assert selected[0]["metadata"]["trust_status"] == "Suspicious"
+    assert "ignore all previous instructions" in selected[0]["text"].lower()
+    assert selected[0]["metadata"]["trust_status"] == "Trusted"
 
 
 def test_retrieval_excludes_candidate_document_from_neighbor_consensus(monkeypatch):
     import backend.rag.secure_retrieval as retrieval
+    monkeypatch.setattr(retrieval, "scan_prompt_injections", lambda items: {
+        key: {"is_injection": False, "risk_score": 0.0, "scan_status": "complete"} for key, _text in items
+    })
     candidate = _long_clean_candidate()
     received = {}
 
@@ -180,3 +214,40 @@ def test_retrieval_excludes_candidate_document_from_neighbor_consensus(monkeypat
     monkeypatch.setattr(retrieval, "scan_chunk_for_contradiction", capture)
     retrieval.apply_security_filters([candidate], {"clearance_tags": ["PUBLIC"]})
     assert received["exclude_document_id"] == "DOC-REVIEW"
+
+
+def test_retrieval_batch_blocks_injection_and_unavailable(monkeypatch):
+    import backend.rag.secure_retrieval as retrieval
+
+    candidates = [_long_clean_candidate(), _long_clean_candidate()]
+    candidates[0]["chunk_id"] = "clean"
+    candidates[1]["chunk_id"] = "blocked"
+
+    def scan(items):
+        assert [key for key, _text in items] == ["candidate_0", "candidate_1"]
+        return {
+            "candidate_0": {"is_injection": False, "risk_score": 0.1, "scan_status": "complete"},
+            "candidate_1": {"is_injection": True, "risk_score": 1.0, "scan_status": "unavailable"},
+        }
+
+    monkeypatch.setattr(retrieval, "scan_prompt_injections", scan)
+    monkeypatch.setattr(retrieval, "scan_chunk_for_contradiction", lambda _text, **_kwargs: _scan_result("clear"))
+
+    selected = retrieval.apply_security_filters(candidates, {"clearance_tags": ["PUBLIC"]})
+
+    assert [chunk["chunk_id"] for chunk in selected] == ["clean"]
+    assert candidates[1]["filter_reason"] == "BLOCKED_RETRIEVAL_INJECTION_CHECK_UNAVAILABLE"
+
+
+def test_retrieval_blocks_positive_injection(monkeypatch):
+    import backend.rag.secure_retrieval as retrieval
+    candidate = _long_clean_candidate()
+    monkeypatch.setattr(retrieval, "scan_prompt_injections", lambda items: {
+        key: {"is_injection": True, "risk_score": 0.99, "scan_status": "complete"}
+        for key, _text in items
+    })
+
+    selected = retrieval.apply_security_filters([candidate], {"clearance_tags": ["PUBLIC"]})
+
+    assert selected == []
+    assert candidate["filter_reason"] == "BLOCKED_RETRIEVAL_PROMPT_INJECTION"

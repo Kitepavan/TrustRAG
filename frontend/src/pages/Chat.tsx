@@ -262,12 +262,12 @@ export default function Chat() {
         ) : (
           <div className="space-y-3">
             {lastSources.map((src, i) => (
-              <div key={src.chunk_id || i} className="p-3 bg-surface-variant/50 border border-outline-variant rounded-lg text-[12px]">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="font-bold text-primary">{src.document_id}</span>
+              <div key={src.chunk_id || i} className="min-w-0 p-3 bg-surface-variant/50 border border-outline-variant rounded-lg text-[12px]">
+                <div className="mb-2 flex justify-end">
                   <StatusBadge status={src.trust_status || 'Trusted'} size="sm" />
                 </div>
-                <p className="text-on-surface-variant line-clamp-3 italic">"{src.text_preview}"</p>
+                <p className="mb-1 break-all font-bold leading-4 text-primary">{src.document_id}</p>
+                <p className="break-words text-on-surface-variant line-clamp-3 italic">"{src.text_preview}"</p>
                 <div className="mt-2 text-[10px] text-on-surface-variant flex justify-between">
                   <span>Page: {src.page}</span>
                   <span>Score: {roundScore(src.score)}</span>

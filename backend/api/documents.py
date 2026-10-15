@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends
+from pydantic import BaseModel
 
 from backend.rag.ingestion import ingest_document, MAX_FILE_SIZE_MB, ALLOWED_ACCESS_LEVELS
 from backend.rag.embedding import embed_chunks
@@ -70,7 +71,8 @@ def upload_document(
     max_bytes = MAX_FILE_SIZE_MB * 1024 * 1024
     result = None
     completed = False
-    tmp_path = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    tmp_path = tempfile.NamedTemporaryFile(delete=False, suffix=suffix, dir=UPLOAD_DIR)
     try:
         total_written = 0
         while True:
@@ -202,3 +204,100 @@ def get_document(
     ):
         raise HTTPException(status_code=404, detail=f"Document {document_id} not found")
     return _doc_info_with_integrity(metadata[document_id])
+
+
+@router.delete("/{document_id}")
+def delete_document(
+    document_id: str,
+    user: Dict[str, Any] = Depends(get_current_user_required),
+):
+    """Delete a document and its indexed chunks; only Admin and IT Security may do so."""
+    if user.get("role") not in {"Admin", "IT_Security"}:
+        raise HTTPException(status_code=403, detail="Document deletion requires Admin or IT Security clearance")
+
+    with document_store.store_lock(document_store.METADATA_FILE):
+        metadata = get_metadata_store()
+        meta = metadata.get(document_id)
+        if meta is None:
+            raise HTTPException(status_code=404, detail="Document not found")
+        stored_name = meta.get("stored_filename")
+        if not isinstance(stored_name, str) or Path(stored_name).name != stored_name:
+            raise HTTPException(status_code=409, detail="Document storage path is invalid")
+
+        try:
+            (UPLOAD_DIR / stored_name).unlink(missing_ok=True)
+            from backend.rag.vectorstore import delete_document as delete_chunks
+            delete_chunks(document_id)
+            from backend.security.provenance import provenance_tracker
+            provenance_tracker.delete_provenance(document_id)
+            del metadata[document_id]
+            save_metadata_store(metadata)
+        except Exception as exc:
+            logger.exception("Document deletion failed for %s", document_id)
+            raise HTTPException(status_code=500, detail="Document deletion failed; retry to finish cleanup") from exc
+
+    record_event(user["username"], "DOCUMENT_DELETED", "warning", document_id=document_id)
+    return {"document_id": document_id, "deleted": True}
+
+
+class OverrideRequest(BaseModel):
+    trust_status: str
+    reason: str
+
+
+@router.post("/{document_id}/override")
+def override_quarantine(
+    document_id: str,
+    body: OverrideRequest,
+    user: Dict[str, Any] = Depends(get_current_user_required),
+):
+    """Admin break-glass: release a Quarantined document to Trusted/Suspicious.
+
+    Quarantine is default-deny; only Admin may override, and the override is
+    audited. Integrity failures cannot be overridden — they re-quarantine.
+    """
+    if user.get("role") != "Admin":
+        raise HTTPException(status_code=403, detail="Quarantine override requires Admin clearance")
+    trust_status = (body.trust_status or "").strip()
+    if trust_status not in {"Trusted", "Suspicious"}:
+        raise HTTPException(status_code=400, detail="trust_status must be Trusted or Suspicious")
+    if len((body.reason or "").strip()) < 10:
+        raise HTTPException(status_code=400, detail="A reason of at least 10 characters is required")
+
+    with document_store.store_lock(document_store.METADATA_FILE):
+        metadata = get_metadata_store()
+        meta = metadata.get(document_id)
+        if meta is None:
+            raise HTTPException(status_code=404, detail=f"Document {document_id} not found")
+        if meta.get("trust_status") != "Quarantined":
+            raise HTTPException(status_code=400, detail="Only Quarantined documents can be overridden")
+    # Integrity check runs outside the write lock: verified_documents takes the
+    # same file lock, and flock exclusive locks do not re-enter (deadlock).
+    info = _doc_info_with_integrity(meta)
+    if not info.get("integrity_ok"):
+        raise HTTPException(status_code=409, detail="Integrity failure cannot be overridden; re-ingest the document")
+
+    with document_store.store_lock(document_store.METADATA_FILE):
+        metadata = get_metadata_store()
+        meta = metadata.get(document_id)
+        if meta is None or meta.get("trust_status") != "Quarantined":
+            raise HTTPException(status_code=409, detail="Document state changed; retry the override")
+        meta["trust_status"] = trust_status
+        meta["override_by"] = user["username"]
+        meta["override_reason"] = body.reason.strip()
+        save_metadata_store(metadata)
+
+    from backend.rag.vectorstore import unquarantine_document
+    from backend.security.provenance import provenance_tracker
+    try:
+        unquarantine_document(document_id, trust_status)
+    except Exception:
+        logger.exception("Admin override left Chroma status stale; metadata remains authoritative")
+    record = provenance_tracker.get_provenance(document_id)
+    if record is not None:
+        record.trust_status = trust_status
+        record.notes = f"ADMIN_OVERRIDE by {user['username']}: {body.reason.strip()}"
+        provenance_tracker.record_provenance(record)
+    record_event(user["username"], "ADMIN_OVERRIDE", "warning",
+                 document_id=document_id, trust_status=trust_status, reason=body.reason.strip())
+    return {"document_id": document_id, "trust_status": trust_status, "override_by": user["username"]}

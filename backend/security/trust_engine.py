@@ -43,7 +43,11 @@ class TrustEngine:
         # Layer 2: Prompt Injection Scan
         injection_res = scan_for_prompt_injection(text_content)
         if injection_res["is_injection"]:
-            reasons.append(f"PROMPT_INJECTION_DETECTED:{','.join(injection_res['matched_patterns'])}")
+            reasons.append(
+                "PROMPT_INJECTION_SCAN_UNAVAILABLE"
+                if injection_res.get("scan_status") == "unavailable"
+                else "PROMPT_INJECTION_DETECTED"
+            )
             return {
                 "trust_category": "Quarantined",
                 "trust_score": 0.0,
@@ -54,10 +58,6 @@ class TrustEngine:
                 "injection_scan": injection_res,
                 "poison_scan": {"is_poisoned": False, "poison_score": 0.0},
             }
-
-        sanitized_quote_removed = injection_res.get("sanitized_quote_removed", False)
-        if sanitized_quote_removed:
-            reasons.append("PROMPT_INJECTION_EXAMPLE_SANITIZED")
 
         # Layer 3: Knowledge Poisoning Scan
         poison_res = scan_for_knowledge_poisoning(text_content)
@@ -102,7 +102,7 @@ class TrustEngine:
         elif decision == "unavailable":
             reasons.append("NEIGHBOR_CHECK_UNAVAILABLE")
             reasons.extend(contradiction_res.get("reason_codes") or [])
-        neighbor_review_required = decision in {"suspicious", "unavailable"} or sanitized_quote_removed
+        neighbor_review_required = decision in {"suspicious", "unavailable"}
 
         # Layer 4: Compute Final Trust Category and Trust Score
         if is_signed and signature_valid:

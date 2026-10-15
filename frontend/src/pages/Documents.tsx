@@ -10,6 +10,9 @@ const PAGE_SIZE = 5;
 
 export default function Documents() {
   const { data, loading, error, refetch } = useApi(() => api.getDocuments());
+  const { data: currentUser } = useApi(() => api.getCurrentUser(), []);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState('');
   const [uploadResult, setUploadResult] = useState<{ success: boolean; message: string; doc?: DocumentInfo } | null>(null);
   const [accessLevel, setAccessLevel] = useState('INTERNAL');
   const [signature, setSignature] = useState('');
@@ -39,6 +42,21 @@ export default function Documents() {
     void refetch();
     if (uploadTimerRef.current) clearTimeout(uploadTimerRef.current);
     uploadTimerRef.current = setTimeout(() => setUploadResult(null), 8000);
+  };
+
+  const canDelete = currentUser?.role === 'Admin' || currentUser?.role === 'IT_Security';
+  const handleDelete = async (doc: DocumentInfo) => {
+    if (!doc.document_id || !window.confirm(`Delete "${doc.filename}" and its indexed chunks? This cannot be undone.`)) return;
+    setDeletingId(doc.document_id);
+    setDeleteError('');
+    try {
+      await api.deleteDocument(doc.document_id);
+      await refetch();
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : 'Document deletion failed');
+    } finally {
+      setDeletingId(null);
+    }
   };
 
   const allDocuments = data?.documents ?? [];
@@ -146,6 +164,7 @@ export default function Documents() {
             </div>
           ) : (
             <div className="overflow-x-auto">
+              {deleteError && <div role="alert" className="mb-3 text-error">{deleteError}</div>}
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-outline-variant">
@@ -164,6 +183,7 @@ export default function Documents() {
                     <th className="text-left py-3 px-4 text-[11px] leading-[16px] tracking-[0.05em] font-bold text-on-surface-variant uppercase">
                       Indexed At
                     </th>
+                    {canDelete && <th className="text-right py-3 px-4 text-[11px] font-bold text-on-surface-variant uppercase">Actions</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -193,6 +213,15 @@ export default function Documents() {
                           {doc.uploaded_at ? new Date(doc.uploaded_at).toLocaleDateString() : 'N/A'}
                         </span>
                       </td>
+                      {canDelete && <td className="py-3 px-4 text-right">
+                        <button
+                          type="button"
+                          onClick={() => void handleDelete(doc)}
+                          disabled={deletingId === doc.document_id}
+                          aria-label={`Delete ${doc.filename}`}
+                          className="px-3 py-1 text-error border border-error/40 rounded hover:bg-error-container/20 disabled:opacity-50"
+                        >{deletingId === doc.document_id ? 'Deleting…' : 'Delete'}</button>
+                      </td>}
                     </tr>
                   ))}
                 </tbody>

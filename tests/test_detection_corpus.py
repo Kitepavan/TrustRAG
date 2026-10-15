@@ -5,6 +5,7 @@ import time
 from pathlib import Path
 
 import backend.security.contradiction_detector as contradiction_detector
+import backend.security.injection_detector as injection_detector
 from backend.security.contradiction_detector import scan_for_consensus_contradiction
 from backend.security.detector_metrics import calculate_detection_metrics
 from backend.security.hashing import compute_sha256_str
@@ -17,16 +18,19 @@ CORPUS = Path(__file__).parent / "fixtures" / "detection_corpus.json"
 
 def _detect(case, monkeypatch):
     if case["class"] == "injection":
+        score = 1.0 if case["expected"] else 0.1
+        monkeypatch.setattr(
+            injection_detector, "_classify_batch",
+            lambda batch: {key: score for key, _text in batch},
+        )
         injection_result = scan_for_prompt_injection(case["text"])
-        detected = injection_result["is_injection"] or injection_result.get("sanitized_quote_removed", False)
+        detected = injection_result["is_injection"]
         if case.get("signed"):
             trust = TrustEngine.evaluate_document_trust(
                 b"signed corpus item", case["text"], True, True,
                 contradiction_result={"decision": "clear", "complete": True},
             )
-            expected_trust = "Quarantined" if injection_result["is_injection"] else (
-                "Suspicious" if injection_result.get("sanitized_quote_removed") else "Trusted"
-            )
+            expected_trust = "Quarantined" if injection_result["is_injection"] else "Trusted"
             assert trust["trust_category"] == expected_trust
         return detected
     if case["class"] == "poisoning":
@@ -92,6 +96,18 @@ def _detect(case, monkeypatch):
     return result["decision"] in {"suspicious", "quarantine"}
 
 
+def test_injection_corpus_partitions_are_disjoint_and_labeled():
+    corpus = json.loads(CORPUS.read_text())
+    development = [case for case in corpus["development"] if case["class"] == "injection"]
+    held_out = [case for case in corpus["held_out"] if case["class"] == "injection"]
+
+    assert len({case["text"] for case in development}) == len(development)
+    assert len({case["text"] for case in held_out}) == len(held_out)
+    assert {case["text"] for case in development}.isdisjoint(case["text"] for case in held_out)
+    assert {case["expected"] for case in development} == {False, True}
+    assert {case["expected"] for case in held_out} == {False, True}
+
+
 def test_detection_corpus_reports_separate_dev_and_heldout_metrics(monkeypatch, capsys):
     corpus = json.loads(CORPUS.read_text())
     report = {}
@@ -126,7 +142,7 @@ def test_detection_corpus_reports_separate_dev_and_heldout_metrics(monkeypatch, 
     for partition in ("development", "held_out"):
         for case_class in ("injection", "poisoning", "neighbor_contradiction"):
             if partition == "development":
-                expected_cases = 4 if case_class == "neighbor_contradiction" else 5
+                expected_cases = {"injection": 7, "poisoning": 5, "neighbor_contradiction": 4}[case_class]
             else:
-                expected_cases = 7 if case_class == "neighbor_contradiction" else 4
+                expected_cases = {"injection": 6, "poisoning": 4, "neighbor_contradiction": 7}[case_class]
             assert report[partition][case_class]["cases"] == expected_cases

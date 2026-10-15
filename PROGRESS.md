@@ -15,7 +15,7 @@
 | 5 | Vector persistence | ChromaDB cosine similarity, document IDs, classification, trust and digests |
 | 6 | RAG and frontend | OpenRouter; React 19/TypeScript/Vite/Tailwind; seven protected page routes |
 | 7 | Document security | SHA-256, Ed25519 verification, mutable JSON provenance |
-| 8 | Content security | Normalized regex injection/poisoning checks plus trust-weighted neighbor contradiction checks at ingestion and secure retrieval |
+| 8 | Content security | OpenRouter Mercury Decide semantic prompt-injection decisions, separate poisoning checks, and trust-weighted neighbor contradiction checks at ingestion and secure retrieval |
 | 9 | Trust engine | Trusted / Suspicious / Quarantined categorical policy |
 | 10 | Authentication and RBAC | JWT, scrypt credentials, opt-in demo passwords, four role profiles |
 | 11 | Secure retrieval | Authoritative integrity verification, quarantine propagation, RBAC, rescanning and trust ranking |
@@ -28,7 +28,8 @@
 - Added `backend/security/document_store.py` as the shared authoritative metadata/integrity layer. Retrieval verifies the stored file and retained signature without relying on a preceding document-list request.
 - Integrity failures persist Quarantined status to metadata, ChromaDB and provenance. Missing authoritative evidence, legacy chunks without document IDs/digests, and modified chunk text fail closed.
 - Signed-but-poisoned documents are quarantined; unsigned clean documents remain Suspicious and rank below Trusted documents.
-- Direct injection and poisoning rules normalize Unicode compatibility characters, strip invisible format controls, and collapse whitespace before matching. Explicitly rejected quoted injection payloads are removed from indexed/retrieved context and mark the source Suspicious; nearby framing remains heuristic.
+- Prompt injection is classified through OpenRouter System One (`inception/mercury-decide:free`) using typed yes/no probabilities. Ingestion quarantines positive or unavailable scans; secure retrieval excludes positive or unavailable candidates in bounded batches. The current 0.5 cutoff is provisional until live development/holdout calibration succeeds. Document text is sent to OpenRouter.
+- Knowledge-poisoning detection remains a separate rule-based signal. The detector no longer strips quoted warning examples from source text; it classifies their intent semantically.
 - Neighbor anomaly checks compare claims with distinct semantically similar documents after authoritative file/signature and chunk-digest verification. Trusted sources are strong evidence; Suspicious sources are weak; Quarantined, missing, and integrity-failed sources cannot support a decision.
 - Two independent Trusted sources with no conflicting Trusted neighbor can quarantine a contradiction. A lone or mixed contradiction becomes Suspicious. An incomplete neighbor check cannot promote ingestion to Trusted and blocks the candidate from secure retrieval. These checks remain heuristics, not complete protection.
 - Metadata/provenance writes use atomic replacement and file locks. Corrupt JSON raises rather than silently returning an empty store. Upload failure cleanup attempts to remove indexed chunks/files.
@@ -48,6 +49,9 @@
 - Documents supports classification and optional base64 signature inputs, shows actual trust status, and keys rows by document ID.
 - `useApi` ignores stale request results and invalidates pending results on cleanup; it does not cancel the requests.
 - Chat offers baseline only to privileged roles and displays pipeline traces returned with successful query responses.
+- Secure chat scans the user's question with Mercury Decide before embedding or retrieval; positive or unavailable scans stop the secure request and produce a security trace. Baseline skips this query scan for controlled comparisons.
+- Baseline comparison returns raw top-K retrieval chunks and uses a plain generation prompt without TrustRAG trust labels or secure-context guardrails. Secure mode keeps trust-aware filtering and context boundaries. Baseline is restricted to Admin/IT_Security and intended for synthetic demonstrations.
+- In a recent manual attack-fixture comparison, Baseline surfaced the fixture's text in its answer while the model declined to follow its malicious instructions; TrustRAG returned an insufficient-context answer. That result alone does not prove which filtering step blocked the fixture; use the pipeline trace to confirm the retrieval reason.
 - OpenRouter replaced the historical Zai provider. Key lookup is lazy; provider failures normally retry and return a labelled context fallback. A missing key returns 502 only when generation is reached; no eligible context returns 200 without calling the provider.
 - Evaluation labels now distinguish check pass counts and `suite_duration_ms` from attack efficacy and RAG latency overhead. Status indicators distinguish configured/not-checked components from real probes.
 
@@ -71,27 +75,9 @@ Both development servers were found stopped/suspended (process state `T`). They 
 
 ## Verification — October 15, 2026
 
-Fresh checks in the isolated detection worktree:
+The OpenRouter threshold calibration script is `scripts/evaluate_injection_detector.py`. Live evaluation selected `0.5101005014718472` by development-set F1, choosing the lower threshold when scores tie to favor recall. On the separate six-case synthetic holdout, Mercury Decide produced 3 TP, 0 FP, 3 TN and 0 FN. Per-case scores and limits are recorded in [the evaluation report](docs/evaluations/2026-10-15-mercury-decide-injection-evaluation.md). The corpus is small and curated, so this is only an initial result, not a general performance claim. Offline contract and integration tests use mocked responses, not real model predictions.
 
-```bash
-PYTHONPATH=. .venv/bin/pytest tests/ -v
-npm --prefix frontend run build
-npm --prefix frontend run lint
-```
-
-**Result: 108 passed, 1 Starlette TestClient/httpx deprecation warning.** Frontend build passed and lint exited 0.
-
-The new detector corpus reports these held-out results:
-
-| Detector class | Cases | TP | FP | TN | FN | Precision | Recall | False-positive rate | Mean fixture latency |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| Prompt injection | 4 | 3 | 0 | 1 | 0 | 100% | 100% | 0% | 0.070 ms |
-| Known poisoning | 4 | 2 | 0 | 2 | 0 | 100% | 100% | 0% | 0.054 ms |
-| Neighbor contradictions | 7 | 5 | 0 | 2 | 0 | 100% | 100% | 0% | 0.045 ms |
-
-The fixture also confirms one unavailable neighbor check per partition. Those checks are reported separately and are not counted as detector negatives. Mean latency uses deterministic test doubles for embeddings and neighbor queries; it is not production or end-to-end retrieval latency. The held-out set is small and curated, so these percentages do not establish general attack-detection performance.
-
-The full suite includes regression checks for normalization, benign rejected prose, sanitized quoted attack payloads, signed attacks, verified and deduplicated neighbors, trust weighting, integrity failures, cold start, unavailable checks, secure retrieval traces, and baseline-path compatibility. Live provider generation and browser GUI acceptance were not tested.
+Focused detector, trust-engine, ingestion, retrieval, evaluation and labeled-corpus tests pass. The full suite did not complete in this environment: `TestClient` hung on a simple local `/` request before returning a response. Frontend files were not changed in this pass.
 
 ## Remaining work and limitations
 

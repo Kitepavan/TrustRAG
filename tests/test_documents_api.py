@@ -3,6 +3,8 @@ TrustRAG — Documents API Security Integration Tests
 """
 
 import io
+from pathlib import Path
+from fastapi import UploadFile
 from fastapi.testclient import TestClient
 
 from backend.main import app
@@ -62,3 +64,96 @@ def test_upload_and_list_documents_security():
 
     # 3. Document metadata is not reachable anonymously.
     assert client.get("/documents/").status_code == 401
+
+
+def test_upload_stages_file_on_destination_filesystem(monkeypatch, tmp_path):
+    import backend.api.documents as documents
+    import backend.security.audit as audit
+
+    monkeypatch.setattr(audit, "AUDIT_DB", tmp_path / "audit.sqlite3")
+    monkeypatch.setattr(
+        documents,
+        "ingest_document",
+        lambda **kwargs: {
+            "status": "processed",
+            "document_id": "DOC-STAGING-TEST",
+            "filename": kwargs["filename"],
+            "sha256": "a" * 64,
+            "is_signed": False,
+            "signature_valid": False,
+            "trust_status": "Suspicious",
+            "access_level": kwargs["access_level"],
+            "uploaded_by": kwargs["uploaded_by"],
+            "uploaded_at": "2026-10-15T00:00:00+00:00",
+            "total_pages": 1,
+            "total_chars": 20,
+            "chunks": [{"chunk_id": "chunk-staging-test", "text": "Upload staging test."}],
+        },
+    )
+    monkeypatch.setattr(documents, "embed_chunks", lambda chunks: chunks)
+    monkeypatch.setattr(documents, "add_chunks", lambda chunks: len(chunks))
+    original_temp_file = documents.tempfile.NamedTemporaryFile
+    staged_paths = []
+
+    def track_staged_file(*args, **kwargs):
+        staged_file = original_temp_file(*args, **kwargs)
+        staged_paths.append(Path(staged_file.name))
+        return staged_file
+
+    monkeypatch.setattr(documents.tempfile, "NamedTemporaryFile", track_staged_file)
+    response = documents.upload_document(
+        file=UploadFile(filename="cross_device.txt", file=io.BytesIO(b"Upload staging test.")),
+        access_level="INTERNAL",
+        signature_b64=None,
+        user={"username": "admin", "clearance_tags": ["INTERNAL"]},
+    )
+
+    assert response["filename"] == "cross_device.txt"
+    assert staged_paths[0].parent == documents.UPLOAD_DIR
+
+
+def test_delete_document_removes_file_metadata_provenance_and_chunks():
+    import pytest
+    import backend.api.documents as documents
+    from backend.rag import vectorstore
+    from backend.security.provenance import ProvenanceRecord, provenance_tracker
+
+    document_id = "DOC-DELETE-TEST"
+    stored_name = f"{document_id}.txt"
+    (documents.UPLOAD_DIR / stored_name).write_text("delete me", encoding="utf-8")
+    metadata = {
+        document_id: {
+            "document_id": document_id,
+            "filename": "delete-me.txt",
+            "stored_filename": stored_name,
+            "access_level": "INTERNAL",
+            "trust_status": "Trusted",
+        }
+    }
+    documents.save_metadata_store(metadata)
+    provenance_tracker.record_provenance(ProvenanceRecord(
+        document_id=document_id, filename="delete-me.txt", sha256_hash="a" * 64,
+        signature_valid=True,
+    ))
+    vectorstore.add_chunks([{
+        "chunk_id": "delete-chunk", "text": "delete me", "embedding": [0.1, 0.2],
+        "document_id": document_id,
+    }])
+
+    response = documents.delete_document(document_id, user={"username": "admin", "role": "Admin"})
+
+    assert response == {"document_id": document_id, "deleted": True}
+    assert not (documents.UPLOAD_DIR / stored_name).exists()
+    assert document_id not in documents.get_metadata_store()
+    assert provenance_tracker.get_provenance(document_id) is None
+    assert vectorstore.get_collection().get(where={"document_id": document_id})["ids"] == []
+
+
+def test_delete_document_requires_privileged_role():
+    import pytest
+    import backend.api.documents as documents
+    from fastapi import HTTPException
+
+    with pytest.raises(HTTPException) as error:
+        documents.delete_document("DOC-DELETE-TEST", user={"username": "emp_user", "role": "Employee"})
+    assert error.value.status_code == 403

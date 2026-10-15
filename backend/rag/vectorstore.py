@@ -87,5 +87,13 @@ def quarantine_document(document_id: str):
         collection.update(ids=records["ids"], metadatas=[dict(meta, trust_status="Quarantined") for meta in records["metadatas"]])
 
 
+def unquarantine_document(document_id: str, trust_status: str):
+    """Restore an admin-overridden document's trust status across its chunks."""
+    collection = get_collection()
+    records = collection.get(where={"document_id": document_id}, include=["metadatas"])
+    if records["ids"]:
+        collection.update(ids=records["ids"], metadatas=[dict(meta, trust_status=trust_status) for meta in records["metadatas"]])
+
+
 def delete_document(document_id: str):
     get_collection().delete(where={"document_id": document_id})

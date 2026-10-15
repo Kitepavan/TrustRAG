@@ -57,6 +57,10 @@ export const api = {
   },
   // Documents
   getDocuments: () => request<DocumentsResponse>('/documents/'),
+  deleteDocument: (documentId: string) => request<{ document_id: string; deleted: boolean }>(
+    `/documents/${encodeURIComponent(documentId)}`,
+    { method: 'DELETE' },
+  ),
   uploadDocument: async (
     file: File,
     accessLevel: string = 'INTERNAL',

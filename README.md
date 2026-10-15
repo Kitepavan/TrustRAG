@@ -50,12 +50,16 @@ test -e .env || cp .env.example .env
 
 | Variable | Required | Purpose |
 |----------|----------|---------|
-| `OPENROUTER_API_KEY` | Yes (for generation) | App boots without it; generation returns 502 if reached without a key. No eligible context returns 200 without an LLM call |
+| `OPENROUTER_API_KEY` | Yes (for injection scanning and generation) | App boots without it; missing/unavailable classification quarantines ingestion and blocks secure retrieval candidates. Generation returns 502 if reached without a key; no eligible context returns 200 without an LLM call |
 | `TRUSTRAG_JWT_SECRET` | Yes (for login) | JWT signing secret. Generate one: `python -c "import secrets; print(secrets.token_urlsafe(48))"` |
 | `TRUSTRAG_DEMO_MODE` | No (`false`) | `true` enables the fixed demo passwords below. Without it, accounts authenticate via `TRUSTRAG_PASSWORD_HASH_<USERNAME>` scrypt hashes (format `salt_hex:hash_hex`) |
 | `LLM_MODEL` | No | Defaults to `nvidia/nemotron-3.5-lightning:free` |
 | `EMBEDDING_MODEL_PATH` | No | Defaults to `/home/pavan/AI-Models/embeddinggemma-300m` |
 | `TRUSTRAG_ALLOWED_ORIGINS` | No | Comma-separated CORS origins; defaults to the Vite dev/build ports |
+
+Prompt-injection checks use `inception/mercury-decide:free` through OpenRouter's
+System One endpoint. `LLM_MODEL` configures answer generation separately. Scanned
+document text is sent to OpenRouter; the detector fails closed on provider errors.
 
 ### One-Command Launch
 
@@ -126,6 +130,7 @@ academic comparison) is gated to `Admin` / `IT_Security` and is only shown to th
 | GET | `/auth/me` | ✅ | Current user profile (401 without a valid token) |
 | GET | `/auth/personas` | – | Persona list (no passwords) |
 | POST | `/documents/upload` | ✅ | Upload and ingest a document; signature optional |
+| POST | `/documents/{id}/override` | Admin | Break-glass release of a Quarantined doc (audited; integrity failures excluded) |
 | GET | `/documents/` | ✅ | List authorized documents (+ integrity re-check) |
 | GET | `/documents/{id}` | ✅ | Get document metadata |
 | POST | `/query` | ✅ | Query the RAG pipeline (`secure` or `baseline` mode) |
@@ -208,6 +213,7 @@ TrustRAG/
 │       ├── document_store.py   # Authoritative metadata, integrity & quarantine propagation
 │       ├── injection_detector.py
 │       ├── poison_detector.py
+│       ├── contradiction_detector.py # Any-topic consensus contradiction (local embedding)
 │       ├── trust_engine.py     # Trusted / Suspicious / Quarantined policy engine
 │       ├── auth.py             # JWT issuance, verification, RBAC
 │       ├── evaluation.py       # Stage 12 component checks
@@ -223,7 +229,7 @@ TrustRAG/
 
 1. **Dashboard** — Overview with stats cards and pipeline visualization
 2. **Documents** — Upload and manage documents with drag-and-drop
-3. **RAG Chat** — Chat interface for querying the knowledge base (secure / baseline modes)
+3. **RAG Chat** — Compare TrustRAG secure mode with the Admin/IT_Security-only, intentionally vulnerable Baseline reference. Baseline returns raw top-K chunks and uses a plain answer prompt without TrustRAG trust labels or secure-context guardrails; use it only with synthetic demo attacks.
 4. **Security Benchmark** — Synthetic component security checks (see methodology note on the page)
 5. **Knowledge Base** — Browse authorized indexed documents and their metadata
 6. **System Status** — Component status; configured/not-checked is not a live provider probe
@@ -235,6 +241,15 @@ TrustRAG/
 PYTHONPATH=. .venv/bin/pytest tests/ -v
 ```
 
+Run the separate live injection-threshold evaluation with the configured OpenRouter key:
+
+```bash
+PYTHONPATH=. .venv/bin/python scripts/evaluate_injection_detector.py
+```
+
+It sends only the labeled synthetic corpus to Mercury Decide, selects the cutoff on the
+development partition and reports the held-out partition without retuning it.
+
 Covers hashing, Ed25519 sign/verify (public-key-only verification), provenance, ingestion
 (valid/tampered/unsigned), both content detectors, the trust engine (including signed
 poisoning), JWT auth & RBAC (including demo-password modes), API authentication boundaries
@@ -243,7 +258,10 @@ baseline gating, bounded `top_k`, retrieval-time quarantine without a preceding 
 chunk-digest mismatch and corrupt metadata. Tests isolate file stores, keys, provenance
 and ChromaDB from real data. Audit tests cover event privacy at current call sites,
 privileged access, filtering/pagination and persistence failure. The latest run passed
-68 tests with one Starlette TestClient deprecation warning; it did not call OpenRouter.
+The latest detector-focused run passed 56 tests with one Starlette TestClient warning.
+The full suite did not complete in this environment because TestClient hung on a local
+`/` request. Unit tests mock the classifier; a separate live synthetic-corpus evaluation
+selected the injection threshold and is summarized in `PROJECT_REPORT.md`.
 
 Frontend checks:
 
@@ -259,7 +277,7 @@ npm --prefix frontend run lint
 - Ensure you're in the project root directory
 - Ensure the virtual environment is activated: `source .venv/bin/activate`
 - Check port 8000 is not in use: `lsof -i :8000`
-- The app boots without `OPENROUTER_API_KEY`; generation returns 502 when reached without a key. A query with no eligible context returns 200 without calling the LLM.
+- The app boots without `OPENROUTER_API_KEY`, but prompt-injection scans fail closed: uploads are quarantined and secure retrieval candidates are blocked. Generation returns 502 when reached without a key. A query with no eligible context returns 200 without calling the answer model.
 
 ### 401 Not authenticated
 
@@ -327,14 +345,16 @@ and `next_cursor`. Only Admin/IT_Security can read it. The current UI displays t
 
 Both SQLite audit events and JSON document provenance are mutable, **not cryptographically
 tamper-evident**. The audit page's “tamper-resistant” wording is not an established security
-guarantee. Logging failures do not disable enforcement. Regex detectors, context delimiters
-and fixed trust scores do not establish complete attack prevention. Authorized context
-is sent to OpenRouter; operators must approve that external processing.
+guarantee. Logging failures do not disable enforcement. The semantic injection classifier,
+regex-based poisoning checks, context delimiters and fixed trust scores do not establish
+complete attack prevention. Document text is sent to OpenRouter for injection scanning;
+operators must approve that external processing.
 
 ## Documentation map
 
 - [PROGRESS.md](PROGRESS.md): completed changes, verification counts and remaining work.
 - [PROJECT_REPORT.md](PROJECT_REPORT.md): academic architecture, threat model and limitations.
+- [Mercury Decide evaluation](docs/evaluations/2026-10-15-mercury-decide-injection-evaluation.md): labeled development/holdout results and case-level probabilities.
 - [TRUSTRAG_PROJECT_CONTEXT.md](TRUSTRAG_PROJECT_CONTEXT.md): current handoff and archived history.
 - [AGENTS.md](AGENTS.md): workspace instructions and implementation pointers.
 - [frontend/README.md](frontend/README.md): frontend setup, routes and behavior.

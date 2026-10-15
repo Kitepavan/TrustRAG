@@ -6,7 +6,11 @@ import pytest
 from backend.security.evaluation import SecurityEvaluator
 
 
-def test_security_benchmark_suite():
+def test_security_benchmark_suite(monkeypatch):
+    monkeypatch.setattr(
+        "backend.security.evaluation.scan_for_prompt_injection",
+        lambda _text: {"is_injection": True, "risk_score": 0.99, "scan_status": "complete"},
+    )
     res = SecurityEvaluator.run_benchmark_suite()
     assert "summary" in res
     assert "scenarios" in res
@@ -20,3 +24,16 @@ def test_security_benchmark_suite():
     for sc in res["scenarios"]:
         assert sc["baseline_passed"] is False
         assert sc["trustrag_passed"] is True
+
+
+def test_security_benchmark_reports_classifier_unavailable(monkeypatch):
+    monkeypatch.setattr(
+        "backend.security.evaluation.scan_for_prompt_injection",
+        lambda _text: {"is_injection": True, "risk_score": 1.0, "scan_status": "unavailable"},
+    )
+
+    result = SecurityEvaluator.run_benchmark_suite()
+
+    scenario = next(item for item in result["scenarios"] if item["scenario"] == "Indirect Prompt Injection")
+    assert scenario["classifier_status"] == "unavailable"
+    assert scenario["trustrag_result"] == "BLOCKED (Classifier unavailable)"

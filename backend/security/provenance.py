@@ -54,6 +54,15 @@ class ProvenanceTracker:
             records[record.document_id] = record.model_dump()
             self._save_all(records)
 
+    def delete_provenance(self, document_id: str) -> None:
+        """Remove the provenance record for a deleted document."""
+        from backend.security.document_store import store_lock
+        with store_lock(self.log_path):
+            records = self._load_all()
+            if document_id in records:
+                del records[document_id]
+                self._save_all(records)
+
     def get_provenance(self, document_id: str) -> Optional[ProvenanceRecord]:
         """Retrieve a provenance record by document_id."""
         records = self._load_all()

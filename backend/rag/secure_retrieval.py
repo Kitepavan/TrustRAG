@@ -9,7 +9,7 @@ from backend.security.auth import check_rbac_permission, user_can_run_baseline
 from backend.security.document_store import verified_documents
 from backend.security.hashing import compute_sha256_str
 from backend.security.poison_detector import scan_for_knowledge_poisoning
-from backend.security.injection_detector import scan_for_prompt_injection
+from backend.security.injection_detector import scan_prompt_injections
 from backend.security.contradiction_detector import scan_chunk_for_contradiction
 
 def apply_security_filters(candidates: List[Dict[str, Any]], user: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -25,8 +25,9 @@ def apply_security_filters(candidates: List[Dict[str, Any]], user: Dict[str, Any
     """
     user_clearance = user.get("clearance_tags", [])
     filtered_chunks: List[Dict[str, Any]] = []
+    eligible = []
 
-    for chunk in candidates:
+    for index, chunk in enumerate(candidates):
         meta = chunk.get("metadata", {})
         trust_status = meta.get("trust_status")
         access_level = meta.get("access_level")
@@ -41,16 +42,24 @@ def apply_security_filters(candidates: List[Dict[str, Any]], user: Dict[str, Any
             chunk["filter_reason"] = "BLOCKED_UNAUTHORIZED_RBAC"
             continue
 
-        # Defense Filter 3: Retrieval-time second scan for prompt injection
-        injection_scan = scan_for_prompt_injection(chunk.get("text", ""))
+        eligible.append((f"candidate_{index}", chunk))
+
+    # Scan only authorized, non-quarantined candidates, in bounded provider batches.
+    injection_scans = scan_prompt_injections([
+        (key, chunk.get("text", "")) for key, chunk in eligible
+    ])
+
+    for key, chunk in eligible:
+        meta = chunk.get("metadata", {})
+        injection_scan = injection_scans.get(key, {
+            "is_injection": True, "risk_score": 1.0, "scan_status": "unavailable",
+        })
+        if injection_scan.get("scan_status") != "complete":
+            chunk["filter_reason"] = "BLOCKED_RETRIEVAL_INJECTION_CHECK_UNAVAILABLE"
+            continue
         if injection_scan["is_injection"]:
             chunk["filter_reason"] = "BLOCKED_RETRIEVAL_PROMPT_INJECTION"
             continue
-        if injection_scan.get("sanitized_quote_removed"):
-            chunk["text"] = injection_scan["sanitized_text"]
-            chunk["metadata"] = dict(meta, trust_status="Suspicious")
-            chunk["review_reason"] = "REVIEW_RETRIEVAL_QUOTED_INJECTION"
-            meta = chunk["metadata"]
 
         if scan_for_knowledge_poisoning(chunk.get("text", ""))["is_poisoned"]:
             chunk["filter_reason"] = "BLOCKED_RETRIEVAL_POISONING"
@@ -140,6 +149,7 @@ def secure_retrieve_chunks(
         ("BLOCKED_QUARANTINED", "Quarantined or invalid trust metadata."),
         ("BLOCKED_UNAUTHORIZED_RBAC", "Excluded by role-based access control."),
         ("BLOCKED_RETRIEVAL_PROMPT_INJECTION", "Prompt injection detected during content rescan."),
+        ("BLOCKED_RETRIEVAL_INJECTION_CHECK_UNAVAILABLE", "Prompt-injection check could not complete."),
         ("BLOCKED_RETRIEVAL_POISONING", "Knowledge poisoning detected during content rescan."),
         ("BLOCKED_RETRIEVAL_CONTRADICTION", "Trusted-neighbor quorum contradiction detected."),
         ("BLOCKED_RETRIEVAL_NEIGHBOR_UNAVAILABLE", "Neighbor security check could not complete."),

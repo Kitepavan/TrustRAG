@@ -46,6 +46,17 @@ def isolated_stores(tmp_path, monkeypatch):
     client.delete_collection(collection.name)
 
 
+@pytest.fixture(autouse=True)
+def offline_injection_classifier(monkeypatch, request):
+    """Keep the suite offline; API contract tests mock httpx directly."""
+    if request.path.name != "test_injection_detector.py":
+        from backend.security import injection_detector
+        monkeypatch.setattr(
+            injection_detector, "_classify_batch",
+            lambda batch: {key: 0.0 for key, _text in batch},
+        )
+
+
 def pytest_sessionfinish(session, exitstatus):
     os.chdir(_original_cwd)
     _test_root.cleanup()

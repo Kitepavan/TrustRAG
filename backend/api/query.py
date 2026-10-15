@@ -13,6 +13,7 @@ from backend.rag.embedding import embed_query
 from backend.rag.secure_retrieval import secure_retrieve_chunks
 from backend.rag.llm import generate_answer
 from backend.security.auth import get_current_user_required, user_can_run_baseline
+from backend.security.injection_detector import scan_for_prompt_injection
 
 router = APIRouter(tags=["query"])
 
@@ -60,6 +61,47 @@ def query_rag(
 
     if req.mode == "baseline":
         record_event(user["username"], "BASELINE_MODE_USED", "warning", request_id)
+    else:
+        try:
+            prompt_scan = scan_for_prompt_injection(req.question)
+        except Exception:
+            logger.exception("Prompt-injection scan failed during query")
+            prompt_scan = {"is_injection": True, "risk_score": 1.0, "scan_status": "unavailable"}
+
+        if prompt_scan.get("scan_status") != "complete":
+            pipeline_log.append({
+                "stage": "prompt_security",
+                "status": "blocked",
+                "message": "Prompt-injection screening was unavailable; retrieval and generation stopped.",
+            })
+            return {
+                **finish("QUERY_BLOCKED_INJECTION_CHECK_UNAVAILABLE", "error"),
+                "answer": "This query was blocked because its security check could not complete. Please try again later.",
+                "sources": [],
+                "mode": req.mode,
+                "user_role": user["role"],
+            }
+
+        if prompt_scan["is_injection"]:
+            pipeline_log.append({
+                "stage": "prompt_security",
+                "status": "blocked",
+                "message": f"Mercury Decide flagged this query as prompt injection (risk score: {prompt_scan['risk_score']:.3f}); retrieval and generation stopped.",
+            })
+            return {
+                **finish("QUERY_BLOCKED_PROMPT_INJECTION", "warning"),
+                "answer": "This query was blocked by TrustRAG's prompt-injection check.",
+                "sources": [],
+                "mode": req.mode,
+                "user_role": user["role"],
+            }
+
+        pipeline_log.append({
+            "stage": "prompt_security",
+            "status": "passed",
+            "message": f"Mercury Decide cleared this query (risk score: {prompt_scan['risk_score']:.3f}).",
+        })
+
     try:
         query_embedding = embed_query(req.question)
         pipeline_log.append({"stage": "embedding", "status": "passed", "message": "Query embedding generated."})
@@ -86,7 +128,7 @@ def query_rag(
         }
 
     try:
-        answer = generate_answer(req.question, results)
+        answer = generate_answer(req.question, results, mode=req.mode)
     except Exception:
         logger.exception("LLM call failed during query")
         pipeline_log.append({"stage": "generation", "status": "error", "message": "Language model service unavailable."})

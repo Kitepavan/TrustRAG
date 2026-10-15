@@ -123,7 +123,7 @@ def test_employee_upload_and_secure_query(monkeypatch):
         return [dict(chunk, embedding=[1.0, 0.0]) for chunk in chunks]
     monkeypatch.setattr("backend.api.documents.embed_chunks", embed)
     monkeypatch.setattr("backend.api.query.embed_query", lambda question: [1.0, 0.0])
-    monkeypatch.setattr("backend.api.query.generate_answer", lambda question, chunks: chunks[0]["text"])
+    monkeypatch.setattr("backend.api.query.generate_answer", lambda question, chunks, **_kwargs: chunks[0]["text"])
     with TestClient(app) as client:
         upload = client.post("/documents/upload", headers=auth("emp_user"),
                              files={"file": ("employee.txt", b"Company holidays are in December.")})
@@ -142,7 +142,7 @@ def test_restricted_document_role_matrix(monkeypatch):
         return [dict(chunk, embedding=[1.0, 0.0]) for chunk in chunks]
     monkeypatch.setattr("backend.api.documents.embed_chunks", embed)
     monkeypatch.setattr("backend.api.query.embed_query", lambda question: [1.0, 0.0])
-    monkeypatch.setattr("backend.api.query.generate_answer", lambda question, chunks: chunks[0]["text"])
+    monkeypatch.setattr("backend.api.query.generate_answer", lambda question, chunks, **_kwargs: chunks[0]["text"])
     with TestClient(app) as client:
         tokens = {}
         for username, password in [("emp_user", "emp123"), ("hr_user", "hr123"),
