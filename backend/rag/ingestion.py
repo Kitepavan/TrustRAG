@@ -158,6 +158,24 @@ def ingest_document(
 
     signature_valid = verify_signature(raw_bytes, signature_b64) if is_signed else False
 
+    # Consensus contradiction check vs Trusted baseline (fails open on error;
+    # cold-start with no baseline never blocks). Must run before indexing so
+    # the new document cannot match itself.
+    try:
+        from backend.security.contradiction_detector import scan_for_consensus_contradiction
+        contradiction_result = scan_for_consensus_contradiction(
+            extraction["full_text"], exclude_document_id=doc_id
+        )
+    except Exception:
+        contradiction_result = {
+            "decision": "unavailable",
+            "is_contradiction": False,
+            "contradiction_score": 0.0,
+            "reason_codes": ["NEIGHBOR_CHECK_UNAVAILABLE"],
+            "evidence": [],
+            "complete": False,
+        }
+
     # Trust Engine Evaluation
     trust_eval = trust_engine.evaluate_document_trust(
         file_bytes=raw_bytes,
@@ -165,10 +183,36 @@ def ingest_document(
         is_signed=is_signed,
         signature_valid=signature_valid,
         uploader=uploaded_by,
+        contradiction_result=contradiction_result,
     )
 
     trust_status = trust_eval["trust_category"]
     trust_score = trust_eval["trust_score"]
+    injection_scan = trust_eval.get("injection_scan", {})
+    if injection_scan.get("sanitized_quote_removed"):
+        from backend.security.injection_detector import (
+            INJECTION_EXAMPLE_PREFIX,
+            INJECTION_PATTERNS,
+            REJECTION_SUFFIX,
+        )
+        from backend.security.text_normalization import remove_explicitly_rejected_quotes
+
+        # Mask against the complete extracted document so quotes spanning PDF
+        # page boundaries cannot reappear in indexed page chunks.
+        joined_pages = "\f".join(page["text"] for page in extraction["pages"])
+        sanitized_pages = remove_explicitly_rejected_quotes(
+            joined_pages,
+            (pattern for pattern, _ in INJECTION_PATTERNS),
+            INJECTION_EXAMPLE_PREFIX,
+            REJECTION_SUFFIX,
+        ).split("\f")
+        if len(sanitized_pages) != len(extraction["pages"]):
+            raise ValueError("Sanitization changed extracted page boundaries")
+        for page, sanitized_text in zip(extraction["pages"], sanitized_pages):
+            page["text"] = sanitized_text
+            page["char_count"] = len(sanitized_text)
+        extraction["full_text"] = "\n".join(page["text"] for page in extraction["pages"])
+        extraction["total_chars"] = len(extraction["full_text"])
 
     # Record provenance log
     prov_record = ProvenanceRecord(

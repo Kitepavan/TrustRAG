@@ -2,7 +2,7 @@
 
 ## Secure Retrieval-Augmented Generation
 
-**Status (September 17, 2026):** Stages 1–11 are implemented as an academic prototype. Stage 12 provides synthetic component checks, not a completed empirical evaluation of end-to-end LLM security.
+**Status (October 15, 2026):** Stages 1–11 are implemented as an academic prototype. Stage 12 includes synthetic component checks and a small labeled detector corpus, not a completed empirical evaluation of end-to-end LLM security.
 
 ## Motivation
 
@@ -17,11 +17,11 @@ The most semantically relevant document is not necessarily the safest document. 
 5. **Storage:** ChromaDB cosine similarity with document identity, file and chunk digests, classification and trust metadata.
 6. **Generation and UI:** OpenRouter (default `nvidia/nemotron-3.5-lightning:free`), React 19, strict TypeScript, Vite and Tailwind. Seven pages: Dashboard, Documents, Chat, Evaluation, Audit Log, Knowledge Base and Status.
 7. **Document security:** SHA-256, Ed25519 signatures and mutable JSON provenance records. Verification requires only the public key; signatures are retained with new document metadata. Key generation refuses incomplete or mismatched existing pairs.
-8. **Content security:** Case-insensitive regex injection and poisoning detectors, at ingestion and retrieval. These are demonstration heuristics, not semantic classifiers or guarantees against adversarial content.
-9. **Trust:** Signed and clean is Trusted; unsigned and clean is Suspicious; invalid signatures or positive injection/poisoning scans are Quarantined, including signed poisoned content. Fixed scores are policy constants, not calibrated probabilities.
+8. **Content security:** Unicode/whitespace-normalized regex injection and poisoning checks, plus a local-embedding neighbor contradiction check at ingestion and secure retrieval. Neighbor evidence is file/signature and chunk-digest verified, deduplicated by document, and weighted by trust status. Two non-conflicting Trusted sources can quarantine a contradiction; ambiguous or single-source evidence is Suspicious. These remain heuristics, not semantic classifiers or guarantees against adversarial content.
+9. **Trust:** Signed and clean is Trusted only after a complete neighbor check; unsigned clean is Suspicious; invalid signatures or high-confidence injection/poisoning and trusted-neighbor quorum contradictions are Quarantined, including signed malicious content. Ambiguous or unavailable neighbor checks cannot produce Trusted status. Fixed scores are policy constants, not calibrated probabilities.
 10. **Authentication:** HS256 JWTs, four fixed role profiles, environment-configured scrypt password hashes. Known demo passwords work only with explicit `TRUSTRAG_DEMO_MODE=true`. The browser contains no embedded passwords and requires sign-in.
-11. **Secure retrieval:** Oversample candidates, verify authoritative document records and current file integrity (including signatures for signed documents), enforce classification and trust, check chunk digests, rescan content, rank Trusted before Suspicious and then by distance. Missing evidence fails closed. Quarantine is persisted in metadata and propagated to ChromaDB and provenance. Baseline remains intentionally unfiltered and restricted to Admin/IT_Security at both API and shared retrieval layers.
-12. **Evaluation:** Four synthetic component scenarios, with actual Ed25519 verification in the tamper case and real RBAC filtering in the authorization case. Baseline outcomes represent unfiltered-control assumptions. Percentages describe these fixed cases only. `suite_duration_ms` measures check runtime, not RAG latency overhead.
+11. **Secure retrieval:** Oversample candidates, verify authoritative document records and current file integrity (including signatures for signed documents), enforce classification and trust, check chunk digests, rescan direct patterns and neighbor evidence, then rank Trusted before Suspicious and by distance. Quarantine and unavailable neighbor checks are excluded from secure context; ambiguous neighbor findings remain Suspicious. Baseline remains intentionally unfiltered and restricted to Admin/IT_Security at both API and shared retrieval layers.
+12. **Evaluation:** Four synthetic component scenarios plus a small labeled detector corpus. The detector corpus uses injected embedding/query doubles and reports per-class confusion metrics; it does not measure live retrieval or answer quality. Baseline outcomes in the component suite remain assumptions. `suite_duration_ms` measures check runtime, not RAG latency overhead.
 
 ## Authorization and session lifecycle
 
@@ -62,16 +62,15 @@ npm --prefix frontend run build
 npm --prefix frontend run lint
 ```
 
-Tests isolate document storage, keys, provenance and ChromaDB. Coverage includes authentication boundaries, JWT expiry/forgery, classification checks, signed ingestion, query-time quarantine without a preceding listing, missing evidence, chunk modification, signed poisoning, public-only verification and malformed metadata. The local embedding-model integration remains part of the upload test. No live OpenRouter request is required. Audit tests cover role gating, query/upload
-telemetry, call-site privacy, filtering/pagination and persistence failure.
+Fresh checks in the isolated detection worktree on October 15, 2026: **108 passed, 1 warning** (Starlette TestClient/httpx deprecation); frontend build passed and lint exited 0.
 
-Fresh verification on September 17, 2026: **68 passed, 1 warning**; TypeScript/Vite build
-passed and lint returned zero warnings/errors. The warning concerns Starlette TestClient's
-httpx deprecation. These checks are not browser acceptance or a live provider experiment.
+The labeled detector fixture held out four injection cases (3 TP, 0 FP, 1 TN, 0 FN), four poisoning cases (2 TP, 0 FP, 2 TN, 0 FN), and seven neighbor-contradiction cases (5 TP, 0 FP, 2 TN, 0 FN). Quoted attack payloads that are explicitly rejected are stripped from indexed and retrieved context; the containing source is marked Suspicious for review. One unavailable neighbor check in each partition was separately confirmed as unavailable rather than counted negative. These small curated results are regression evidence only. Fixture latency uses test doubles and excludes local embedding and ChromaDB costs; it is not a production latency measurement.
+
+No live OpenRouter request or browser GUI acceptance test was run.
 
 ## Limits and remaining academic work
 
-- A broader held-out corpus, measured false-positive/negative rates, retrieval quality, answer quality and secure-versus-baseline latency remain research work. No universal protection percentage is justified.
+- A larger independently sourced held-out corpus, measured real-embedding false-positive/negative rates, retrieval quality, answer quality and secure-versus-baseline latency remain research work. The current tiny fixture’s 100% class metrics do not establish general performance; no universal protection percentage is justified.
 - Context delimiters and system instructions are mitigations, not a hard prompt-injection boundary.
 - Oversampling is bounded to three times top-K; filtering can underfill results. Long-document extraction and embedding remain resource-intensive.
 - Authorized context is sent to OpenRouter. Operators must approve external processing of their data; no classification-specific egress policy is implemented.

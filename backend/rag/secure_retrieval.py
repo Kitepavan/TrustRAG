@@ -10,14 +10,15 @@ from backend.security.document_store import verified_documents
 from backend.security.hashing import compute_sha256_str
 from backend.security.poison_detector import scan_for_knowledge_poisoning
 from backend.security.injection_detector import scan_for_prompt_injection
-
+from backend.security.contradiction_detector import scan_chunk_for_contradiction
 
 def apply_security_filters(candidates: List[Dict[str, Any]], user: Dict[str, Any]) -> List[Dict[str, Any]]:
     """
     Apply TrustRAG's three defense filters to retrieved candidates:
       1. Strictly block Quarantined documents.
       2. Enforce RBAC clearance against each chunk's stored access_level.
-      3. Retrieval-time rescan for prompt injection.
+      3. Retrieval-time rescan for prompt injection and poisoning.
+      4. Trust-weighted neighbor contradiction and availability checks.
     Survivors are ranked: Trusted first, then by similarity distance.
     Annotates blocked candidates with reasons; callable without a vector DB (used by the
     Stage 12 benchmark and by unit tests).
@@ -45,10 +46,40 @@ def apply_security_filters(candidates: List[Dict[str, Any]], user: Dict[str, Any
         if injection_scan["is_injection"]:
             chunk["filter_reason"] = "BLOCKED_RETRIEVAL_PROMPT_INJECTION"
             continue
+        if injection_scan.get("sanitized_quote_removed"):
+            chunk["text"] = injection_scan["sanitized_text"]
+            chunk["metadata"] = dict(meta, trust_status="Suspicious")
+            chunk["review_reason"] = "REVIEW_RETRIEVAL_QUOTED_INJECTION"
+            meta = chunk["metadata"]
 
         if scan_for_knowledge_poisoning(chunk.get("text", ""))["is_poisoned"]:
             chunk["filter_reason"] = "BLOCKED_RETRIEVAL_POISONING"
             continue
+
+        # Defense Filter 4: retrieval-time trust-weighted neighbor rescan.
+        try:
+            neighbor_result = scan_chunk_for_contradiction(
+                chunk.get("text", ""), exclude_document_id=meta.get("document_id")
+            )
+        except Exception:
+            neighbor_result = {"decision": "unavailable", "complete": False}
+        decision = neighbor_result.get("decision")
+        if decision is None:
+            decision = "quarantine" if neighbor_result.get("is_contradiction") else "clear"
+        if decision not in {"clear", "suspicious", "quarantine", "unavailable"}:
+            decision = "unavailable"
+        if not neighbor_result.get("complete", decision != "unavailable") and decision != "quarantine":
+            decision = "unavailable"
+        chunk["neighbor_check_decision"] = decision
+        if decision == "quarantine":
+            chunk["filter_reason"] = "BLOCKED_RETRIEVAL_CONTRADICTION"
+            continue
+        if decision == "unavailable":
+            chunk["filter_reason"] = "BLOCKED_RETRIEVAL_NEIGHBOR_UNAVAILABLE"
+            continue
+        if decision == "suspicious":
+            chunk["metadata"] = dict(meta, trust_status="Suspicious")
+            chunk["review_reason"] = "REVIEW_RETRIEVAL_CONTRADICTION"
         filtered_chunks.append(chunk)
 
     # Sort filtered chunks: Trusted first, then by similarity distance
@@ -110,9 +141,25 @@ def secure_retrieve_chunks(
         ("BLOCKED_UNAUTHORIZED_RBAC", "Excluded by role-based access control."),
         ("BLOCKED_RETRIEVAL_PROMPT_INJECTION", "Prompt injection detected during content rescan."),
         ("BLOCKED_RETRIEVAL_POISONING", "Knowledge poisoning detected during content rescan."),
+        ("BLOCKED_RETRIEVAL_CONTRADICTION", "Trusted-neighbor quorum contradiction detected."),
+        ("BLOCKED_RETRIEVAL_NEIGHBOR_UNAVAILABLE", "Neighbor security check could not complete."),
     ):
         count = sum(chunk.get("filter_reason") == reason for chunk in eligible)
         trace.append({"stage": reason, "status": "blocked" if count else "passed", "message": message, "count": count})
+    review_count = sum(chunk.get("review_reason") == "REVIEW_RETRIEVAL_CONTRADICTION" for chunk in eligible)
+    trace.append({
+        "stage": "REVIEW_RETRIEVAL_CONTRADICTION",
+        "status": "warning" if review_count else "passed",
+        "message": "Mixed or insufficient neighbor evidence; candidate is treated as Suspicious.",
+        "count": review_count,
+    })
+    clear_count = sum(chunk.get("neighbor_check_decision") == "clear" for chunk in eligible)
+    trace.append({
+        "stage": "RETRIEVAL_NEIGHBOR_CHECK",
+        "status": "passed",
+        "message": "Neighbor security check completed without a contradiction.",
+        "count": clear_count,
+    })
     selected = filtered[:top_k]
     trace.append({"stage": "context", "status": "passed" if selected else "warning", "message": "Selected context after trust ranking and top-K limit.", "count": len(selected)})
     return selected

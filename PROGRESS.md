@@ -1,8 +1,8 @@
 # TrustRAG — Project Progress Tracker
 
-> **Current milestone:** Stages 1–11 implemented as an academic prototype; Stage 12 synthetic component checks implemented. End-to-end comparative evaluation remains open.
+> **Current milestone:** Stages 1–11 implemented as an academic prototype; Stage 12 includes synthetic component checks and a small labeled detector corpus. End-to-end baseline-versus-secure RAG evaluation remains open.
 >
-> **Last updated:** September 17, 2026
+> **Last updated:** October 15, 2026
 
 ## Stage roadmap
 
@@ -15,11 +15,11 @@
 | 5 | Vector persistence | ChromaDB cosine similarity, document IDs, classification, trust and digests |
 | 6 | RAG and frontend | OpenRouter; React 19/TypeScript/Vite/Tailwind; seven protected page routes |
 | 7 | Document security | SHA-256, Ed25519 verification, mutable JSON provenance |
-| 8 | Content security | Regex-based injection and poisoning checks at ingestion and retrieval |
+| 8 | Content security | Normalized regex injection/poisoning checks plus trust-weighted neighbor contradiction checks at ingestion and secure retrieval |
 | 9 | Trust engine | Trusted / Suspicious / Quarantined categorical policy |
 | 10 | Authentication and RBAC | JWT, scrypt credentials, opt-in demo passwords, four role profiles |
 | 11 | Secure retrieval | Authoritative integrity verification, quarantine propagation, RBAC, rescanning and trust ranking |
-| 12 | Evaluation | Four synthetic component scenarios; assumed unfiltered baseline outcomes, not a measured end-to-end comparison |
+| 12 | Evaluation | Synthetic component scenarios plus a small labeled detector corpus; still not a measured end-to-end RAG comparison |
 
 ## Completed review and hardening work
 
@@ -28,7 +28,9 @@
 - Added `backend/security/document_store.py` as the shared authoritative metadata/integrity layer. Retrieval verifies the stored file and retained signature without relying on a preceding document-list request.
 - Integrity failures persist Quarantined status to metadata, ChromaDB and provenance. Missing authoritative evidence, legacy chunks without document IDs/digests, and modified chunk text fail closed.
 - Signed-but-poisoned documents are quarantined; unsigned clean documents remain Suspicious and rank below Trusted documents.
-- Added per-chunk text digests and retrieval-time poisoning scans alongside injection scans. Corrected detector patterns and added false-positive/regression coverage; these remain heuristics, not complete protection.
+- Direct injection and poisoning rules normalize Unicode compatibility characters, strip invisible format controls, and collapse whitespace before matching. Explicitly rejected quoted injection payloads are removed from indexed/retrieved context and mark the source Suspicious; nearby framing remains heuristic.
+- Neighbor anomaly checks compare claims with distinct semantically similar documents after authoritative file/signature and chunk-digest verification. Trusted sources are strong evidence; Suspicious sources are weak; Quarantined, missing, and integrity-failed sources cannot support a decision.
+- Two independent Trusted sources with no conflicting Trusted neighbor can quarantine a contradiction. A lone or mixed contradiction becomes Suspicious. An incomplete neighbor check cannot promote ingestion to Trusted and blocks the candidate from secure retrieval. These checks remain heuristics, not complete protection.
 - Metadata/provenance writes use atomic replacement and file locks. Corrupt JSON raises rather than silently returning an empty store. Upload failure cleanup attempts to remove indexed chunks/files.
 - Ed25519 verification requires only the public key; incomplete/mismatched keypairs are not silently rotated. New private-key writes use mode 0600. Uploaded signatures are retained.
 - Full UUID document IDs, classification validation and extraction/upload bounds are implemented. Multipart parsing precedes the copied-file cap, so deployments still need an upstream request-body limit.
@@ -67,38 +69,33 @@ Both development servers were found stopped/suspended (process state `T`). They 
 
 `TRUSTRAG_DEMO_MODE=true` was enabled in the private local `.env` for this demonstration. At that check, the OpenRouter key was empty; live generation was not verified. These are historical recovery results, not a guarantee the processes are still running. This documentation update did not restart services or change `.env`.
 
-## Verification — September 17, 2026
+## Verification — October 15, 2026
 
-Fresh commands run during this documentation update:
+Fresh checks in the isolated detection worktree:
 
 ```bash
-PYTHONPATH=. .venv/bin/pytest tests/ -q
+PYTHONPATH=. .venv/bin/pytest tests/ -v
 npm --prefix frontend run build
 npm --prefix frontend run lint
 ```
 
-**Result: 68 passed, 1 warning in 12.39s.** Build passed; lint reported 0 warnings and 0 errors. The backend warning is a Starlette TestClient deprecation concerning httpx; no dependency change was made.
+**Result: 108 passed, 1 Starlette TestClient/httpx deprecation warning.** Frontend build passed and lint exited 0.
 
-| Test module | Cases | Coverage |
-|---|---:|---|
-| `test_document_security.py` | 6 | Hashing, signing, provenance, ingestion |
-| `test_documents_api.py` | 1 | Authenticated signed upload/list |
-| `test_content_security.py` | 2 | Injection and poisoning detection |
-| `test_trust_engine.py` | 3 | Categorical trust decisions |
-| `test_auth_rbac.py` | 3 | JWT, clearance, demo-password modes |
-| `test_secure_retrieval.py` | 2 | Filtering, baseline gate, context wrapping |
-| `test_evaluation.py` | 1 | Synthetic component suite |
-| `test_security_enforcement.py` | 13 | Auth, bounded inputs, RBAC and detector regressions |
-| `test_api_auth_boundary.py` | 20 | Missing/invalid/expired/valid tokens on protected endpoints |
-| `test_integrity_enforcement.py` | 12 | Quarantine propagation, role matrix, missing evidence and corrupt metadata |
-| `test_audit.py` | 5 | Trace/privacy checks, role gating, pagination/filtering, failure behavior |
-| **Total** | **68** | **All passed** |
+The new detector corpus reports these held-out results:
 
-Tests isolate runtime stores, keys, provenance, audit storage and ChromaDB. Live OpenRouter generation and browser GUI acceptance were not tested in this documentation pass. The prior 60-test checkpoint is superseded by this run.
+| Detector class | Cases | TP | FP | TN | FN | Precision | Recall | False-positive rate | Mean fixture latency |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| Prompt injection | 4 | 3 | 0 | 1 | 0 | 100% | 100% | 0% | 0.070 ms |
+| Known poisoning | 4 | 2 | 0 | 2 | 0 | 100% | 100% | 0% | 0.054 ms |
+| Neighbor contradictions | 7 | 5 | 0 | 2 | 0 | 100% | 100% | 0% | 0.045 ms |
+
+The fixture also confirms one unavailable neighbor check per partition. Those checks are reported separately and are not counted as detector negatives. Mean latency uses deterministic test doubles for embeddings and neighbor queries; it is not production or end-to-end retrieval latency. The held-out set is small and curated, so these percentages do not establish general attack-detection performance.
+
+The full suite includes regression checks for normalization, benign rejected prose, sanitized quoted attack payloads, signed attacks, verified and deduplicated neighbors, trust weighting, integrity failures, cold start, unavailable checks, secure retrieval traces, and baseline-path compatibility. Live provider generation and browser GUI acceptance were not tested.
 
 ## Remaining work and limitations
 
-- Measure end-to-end baseline versus secure retrieval/answer outcomes on a broader held-out corpus, including false positives/negatives and latency.
+- Grow the labeled corpus with independently sourced attack and benign documents; measure real EmbeddingGemma/Chroma behavior, false positives/negatives, and secure-versus-baseline answer outcomes and latency.
 - Production controls remain outside this prototype: TLS, request/rate limits, identity lifecycle/revocation, retention/backups, external-provider data policy and stronger audit integrity.
 - Plain digests and mutable stores assume trusted administrators; provenance is not a separate per-query authorization check. Cross-store writes are not one transaction.
 - Re-ingest legacy documents that lack verification evidence; no automatic migration or deletion was performed.

@@ -6,6 +6,8 @@ Scans input documents and retrieved text chunks for indirect prompt injection at
 import re
 from typing import List, Dict, Any
 
+from backend.security.text_normalization import normalize_security_text, remove_explicitly_rejected_quotes
+
 
 # Regular expression patterns for common indirect prompt injection attack vectors
 INJECTION_PATTERNS = [
@@ -24,6 +26,16 @@ INJECTION_PATTERNS = [
 ]
 
 
+INJECTION_EXAMPLE_PREFIX = re.compile(
+    r"(?i)\b(?:security|awareness|prompt[- ]injection)\s+training\s+example\s*:?"
+    r"|\b(?:previous|old|earlier)\s+(?:attack|prompt|instruction)\s+(?:said|stated|included|contained)\b"
+)
+REJECTION_SUFFIX = re.compile(
+    r"(?i)\b(?:must\s+never|should\s+never|do\s+not|must\s+not|should\s+not)\s+(?:be\s+)?followed\b"
+    r"|\bnever\s+follow(?:\s+(?:it|that\s+(?:attack|prompt|instruction)))?\b"
+)
+
+
 def scan_for_prompt_injection(text: str) -> Dict[str, Any]:
     """
     Scans a block of text for indirect prompt injection patterns.
@@ -35,9 +47,24 @@ def scan_for_prompt_injection(text: str) -> Dict[str, Any]:
     if not text or not text.strip():
         return {"is_injection": False, "risk_score": 0.0, "matched_patterns": []}
 
+    normalized_text = normalize_security_text(text)
+    compact_text = normalize_security_text(text, format_separator="")
+    scan_text = remove_explicitly_rejected_quotes(
+        normalized_text,
+        (pattern for pattern, _ in INJECTION_PATTERNS),
+        INJECTION_EXAMPLE_PREFIX,
+        REJECTION_SUFFIX,
+    )
+    compact_scan_text = remove_explicitly_rejected_quotes(
+        compact_text,
+        (pattern for pattern, _ in INJECTION_PATTERNS),
+        INJECTION_EXAMPLE_PREFIX,
+        REJECTION_SUFFIX,
+    )
+    sanitized_quote_removed = scan_text != normalized_text
     matched = []
     for pattern, rule_id in INJECTION_PATTERNS:
-        if re.search(pattern, text):
+        if re.search(pattern, scan_text) or re.search(pattern, compact_scan_text):
             matched.append(rule_id)
 
     # Risk score calculation
@@ -55,4 +82,6 @@ def scan_for_prompt_injection(text: str) -> Dict[str, Any]:
         "is_injection": is_injection,
         "risk_score": risk_score,
         "matched_patterns": matched,
+        "sanitized_quote_removed": sanitized_quote_removed,
+        "sanitized_text": scan_text if sanitized_quote_removed else normalized_text,
     }

@@ -19,6 +19,7 @@ class TrustEngine:
         is_signed: bool,
         signature_valid: bool,
         uploader: str = "unknown",
+        contradiction_result: Dict[str, Any] | None = None,
     ) -> Dict[str, Any]:
         """
         Evaluate full document security status across all security layers.
@@ -54,10 +55,54 @@ class TrustEngine:
                 "poison_scan": {"is_poisoned": False, "poison_score": 0.0},
             }
 
+        sanitized_quote_removed = injection_res.get("sanitized_quote_removed", False)
+        if sanitized_quote_removed:
+            reasons.append("PROMPT_INJECTION_EXAMPLE_SANITIZED")
+
         # Layer 3: Knowledge Poisoning Scan
         poison_res = scan_for_knowledge_poisoning(text_content)
         if poison_res["is_poisoned"]:
             reasons.append(f"KNOWLEDGE_POISONING_DETECTED:{','.join(poison_res['detected_anomalies'])}")
+
+        # Layer 3b: Trust-weighted neighbor evidence.
+        contradiction_res = contradiction_result or {
+            "decision": "clear", "is_contradiction": False, "complete": True,
+        }
+        decision = contradiction_res.get("decision")
+        # Retain fail-closed behavior for older callers that supply only the flag.
+        if decision is None:
+            decision = "quarantine" if contradiction_res.get("is_contradiction") else "clear"
+        if decision not in {"clear", "suspicious", "quarantine", "unavailable"}:
+            decision = "unavailable"
+        if not contradiction_res.get("complete", decision != "unavailable") and decision != "quarantine":
+            decision = "unavailable"
+
+        if decision == "quarantine":
+            supporting_ids = [
+                item.get("document_id") for item in contradiction_res.get("evidence", [])
+                if item.get("supports_contradiction") and item.get("document_id")
+            ]
+            if not supporting_ids:
+                supporting_ids = (contradiction_res.get("contradictions") or [{}])[0].get("supporting_doc_ids", [])
+            reasons.append(f"CONSENSUS_CONTRADICTION:{','.join(supporting_ids)}")
+            reasons.extend(contradiction_res.get("reason_codes") or [])
+            return {
+                "trust_category": "Quarantined",
+                "trust_score": 0.0,
+                "policy_decision": "BLOCK",
+                "reasons": reasons,
+                "is_signed": is_signed,
+                "signature_valid": signature_valid,
+                "injection_scan": injection_res,
+                "poison_scan": poison_res,
+            }
+        if decision == "suspicious":
+            reasons.append("NEIGHBOR_CONTRADICTION_REQUIRES_REVIEW")
+            reasons.extend(contradiction_res.get("reason_codes") or [])
+        elif decision == "unavailable":
+            reasons.append("NEIGHBOR_CHECK_UNAVAILABLE")
+            reasons.extend(contradiction_res.get("reason_codes") or [])
+        neighbor_review_required = decision in {"suspicious", "unavailable"} or sanitized_quote_removed
 
         # Layer 4: Compute Final Trust Category and Trust Score
         if is_signed and signature_valid:
@@ -65,6 +110,10 @@ class TrustEngine:
                 trust_category = "Quarantined"
                 trust_score = 0.0
                 policy_decision = "BLOCK"
+            elif neighbor_review_required:
+                trust_category = "Suspicious"
+                trust_score = 0.6
+                policy_decision = "ALLOW_WITH_WARNING"
             else:
                 trust_category = "Trusted"
                 trust_score = 1.0

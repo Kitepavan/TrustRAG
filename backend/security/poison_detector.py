@@ -6,6 +6,8 @@ Scans document text for malicious policy overrides, security contradictions, and
 import re
 from typing import List, Dict, Any
 
+from backend.security.text_normalization import normalize_security_text, remove_explicitly_rejected_quotes
+
 
 # Heuristic patterns associated with malicious knowledge poisoning attempts in
 # enterprise documents. Each pattern is written to match ONLY a disabling/negating
@@ -26,6 +28,12 @@ POISON_PATTERNS = [
 ]
 
 
+REJECTED_DRAFT_PREFIX = re.compile(
+    r"(?i)\b(?:previous|old|earlier)\s+(?:draft|policy|version|notice)\b.{0,50}\b(?:claimed|said|stated|asserted)\b"
+)
+REJECTION_SUFFIX = re.compile(r"(?i)\b(?:rejected|withdrawn|superseded|not\s+adopted)\b")
+
+
 def scan_for_knowledge_poisoning(text: str) -> Dict[str, Any]:
     """
     Scans document text for knowledge poisoning patterns.
@@ -37,10 +45,24 @@ def scan_for_knowledge_poisoning(text: str) -> Dict[str, Any]:
     if not text or not text.strip():
         return {"is_poisoned": False, "poison_score": 0.0, "detected_anomalies": []}
 
+    scan_text = normalize_security_text(text)
+    compact_scan_text = normalize_security_text(text, format_separator="")
+    scan_text = remove_explicitly_rejected_quotes(
+        scan_text,
+        (pattern for pattern, _ in POISON_PATTERNS),
+        REJECTED_DRAFT_PREFIX,
+        REJECTION_SUFFIX,
+    )
+    compact_scan_text = remove_explicitly_rejected_quotes(
+        compact_scan_text,
+        (pattern for pattern, _ in POISON_PATTERNS),
+        REJECTED_DRAFT_PREFIX,
+        REJECTION_SUFFIX,
+    )
     detected = []
     for pattern, rule_id in POISON_PATTERNS:
         # Patterns are negation-anchored (see above), so a regex hit is sufficient.
-        if re.search(pattern, text):
+        if re.search(pattern, scan_text) or re.search(pattern, compact_scan_text):
             detected.append(rule_id)
 
     if not detected:

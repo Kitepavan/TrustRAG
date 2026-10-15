@@ -57,3 +57,66 @@ def test_trust_engine_prompt_injection_quarantine():
     assert res["trust_category"] == "Quarantined"
     assert res["trust_score"] == 0.0
     assert res["policy_decision"] == "BLOCK"
+
+
+def test_signed_strong_contradiction_is_quarantined():
+    result = TrustEngine.evaluate_document_trust(
+        file_bytes=b"signed content",
+        text_content="A new policy changes the current password requirement.",
+        is_signed=True,
+        signature_valid=True,
+        contradiction_result={
+            "decision": "quarantine",
+            "is_contradiction": True,
+            "complete": True,
+            "reason_codes": ["TRUSTED_NEIGHBOR_QUORUM_CONTRADICTION"],
+            "evidence": [{"document_id": "DOC-1"}, {"document_id": "DOC-2"}],
+        },
+    )
+    assert result["trust_category"] == "Quarantined"
+    assert result["policy_decision"] == "BLOCK"
+
+
+def test_ambiguous_neighbor_evidence_is_suspicious():
+    result = TrustEngine.evaluate_document_trust(
+        file_bytes=b"signed content",
+        text_content="A new policy changes the current password requirement.",
+        is_signed=True,
+        signature_valid=True,
+        contradiction_result={
+            "decision": "suspicious",
+            "is_contradiction": True,
+            "complete": True,
+            "reason_codes": ["INSUFFICIENT_TRUSTED_QUORUM"],
+        },
+    )
+    assert result["trust_category"] == "Suspicious"
+    assert result["policy_decision"] == "ALLOW_WITH_WARNING"
+
+
+def test_unavailable_neighbor_check_never_trusts_document():
+    result = TrustEngine.evaluate_document_trust(
+        file_bytes=b"signed content",
+        text_content="A new policy changes the current password requirement.",
+        is_signed=True,
+        signature_valid=True,
+        contradiction_result={
+            "decision": "unavailable",
+            "is_contradiction": False,
+            "complete": False,
+            "reason_codes": ["NEIGHBOR_QUERY_FAILED"],
+        },
+    )
+    assert result["trust_category"] == "Suspicious"
+    assert result["trust_category"] != "Trusted"
+
+
+def test_unavailable_neighbor_result_never_trusts_document():
+    result = TrustEngine.evaluate_document_trust(
+        file_bytes=b"signed content",
+        text_content="A new policy changes the current password requirement.",
+        is_signed=True,
+        signature_valid=True,
+        contradiction_result={"decision": "clear", "complete": False},
+    )
+    assert result["trust_category"] == "Suspicious"
