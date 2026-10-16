@@ -11,8 +11,11 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 LLM_BASE_URL = "https://openrouter.ai/api/v1/"
-# OpenRouter is OpenAI-compatible; default to a free, fast chat model.
-LLM_MODEL = os.environ.get("LLM_MODEL", "nvidia/nemotron-3.5-lightning:free")
+# OpenRouter is OpenAI-compatible. `openrouter/auto` routes to a capable model
+# automatically; the free model is a per-request substitute for accounts that the
+# provider refuses to serve the primary for billing reasons.
+LLM_MODEL = os.environ.get("LLM_MODEL", "openrouter/auto")
+LLM_FALLBACK_MODEL = os.environ.get("LLM_FALLBACK_MODEL", "nvidia/nemotron-3.5-lightning:free")
 
 SYSTEM_PROMPT = (
     "You are a helpful assistant. Answer the user's question based ONLY on the "
@@ -90,8 +93,14 @@ def generate_answer(
 
     api_key = _get_api_key()
 
+    # Try the configured model first; substitute the free model only when the provider
+    # refuses to serve it for billing reasons (402), which switching can actually fix.
+    models = [LLM_MODEL] if LLM_FALLBACK_MODEL == LLM_MODEL else [LLM_MODEL, LLM_FALLBACK_MODEL]
+    model_index = 0
+
     last_error: Exception | None = None
     for attempt in range(1, max_retries + 1):
+        payload["model"] = models[model_index]
         try:
             with httpx.Client(timeout=30.0) as client:
                 resp = client.post(
@@ -114,10 +123,21 @@ def generate_answer(
             resp.raise_for_status()
             return resp.json()["choices"][0]["message"]["content"].strip()
         except httpx.HTTPStatusError as error:
+            status_code = error.response.status_code
+
+            # Billing refusal is model-specific: the free model may still answer.
+            if status_code == 402 and model_index + 1 < len(models):
+                logger.warning(
+                    f"OpenRouter refused {models[model_index]} with HTTP 402; "
+                    f"falling back to {models[model_index + 1]}."
+                )
+                model_index += 1
+                continue
+
             # Permanent client errors (invalid key, malformed request) cannot succeed
             # on retry; surface them instead of degrading to a misleading fallback.
-            if 400 <= error.response.status_code < 500 and error.response.status_code != 429:
-                logger.error(f"OpenRouter rejected the request with HTTP {error.response.status_code}; not retrying: {error}")
+            if 400 <= status_code < 500 and status_code != 429:
+                logger.error(f"OpenRouter rejected the request with HTTP {status_code}; not retrying: {error}")
                 raise
             last_error = error
             if attempt < max_retries:

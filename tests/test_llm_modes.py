@@ -101,3 +101,43 @@ def test_permanent_client_error_fails_fast_without_retry(monkeypatch):
     with pytest.raises(httpx.HTTPStatusError):
         llm.generate_answer("Is MFA required?", [_quarantined_chunk()], mode="secure")
     assert calls["count"] == 1
+
+
+def test_billing_refusal_falls_back_to_free_model(monkeypatch):
+    """A 402 is model-specific, so the free fallback still answers instead of raising."""
+    requested_models = []
+
+    class _PaymentRequired:
+        status_code = 402
+
+        def raise_for_status(self):
+            raise httpx.HTTPStatusError(
+                "payment required",
+                request=httpx.Request("POST", "https://openrouter.ai/api/v1/chat/completions"),
+                response=httpx.Response(402),
+            )
+
+    class _FallbackClient:
+        def __init__(self, **_kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            pass
+
+        def post(self, _url, *, json, **_kwargs):
+            requested_models.append(json["model"])
+            # Refuse only the primary model; the fallback succeeds.
+            return _PaymentRequired() if len(requested_models) == 1 else _Response()
+
+    monkeypatch.setattr(llm, "_get_api_key", lambda: "test-key")
+    monkeypatch.setattr(llm.httpx, "Client", _FallbackClient)
+    monkeypatch.setattr(llm, "LLM_MODEL", "openrouter/auto")
+    monkeypatch.setattr(llm, "LLM_FALLBACK_MODEL", "nvidia/nemotron-3.5-lightning:free")
+
+    answer = llm.generate_answer("Is MFA required?", [_quarantined_chunk()], mode="secure")
+
+    assert answer == "answer"
+    assert requested_models == ["openrouter/auto", "nvidia/nemotron-3.5-lightning:free"]
