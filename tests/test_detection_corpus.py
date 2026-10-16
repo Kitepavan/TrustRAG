@@ -142,7 +142,7 @@ def test_detection_corpus_reports_separate_dev_and_heldout_metrics(monkeypatch, 
     for partition in ("development", "held_out"):
         for case_class in ("injection", "poisoning", "neighbor_contradiction"):
             if partition == "development":
-                expected_cases = {"injection": 7, "poisoning": 5, "neighbor_contradiction": 4}[case_class]
+                expected_cases = {"injection": 19, "poisoning": 9, "neighbor_contradiction": 6}[case_class]
             else:
-                expected_cases = {"injection": 6, "poisoning": 4, "neighbor_contradiction": 7}[case_class]
+                expected_cases = {"injection": 16, "poisoning": 7, "neighbor_contradiction": 10}[case_class]
             assert report[partition][case_class]["cases"] == expected_cases

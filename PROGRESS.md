@@ -1,8 +1,8 @@
 # TrustRAG — Project Progress Tracker
 
-> **Current milestone:** Stages 1–11 implemented as an academic prototype; Stage 12 includes synthetic component checks and a small labeled detector corpus. End-to-end baseline-versus-secure RAG evaluation remains open.
+> **Current milestone:** Stages 1–11 implemented as an academic prototype; Stage 12 now includes a **measured** end-to-end baseline-vs-secure run (live classifier + live generation, isolated 10-document corpus, 6 paired questions), a 42-case labeled detector corpus, and a dev-selected injection threshold recalibration. Repeated trials and larger independent corpora remain open.
 >
-> **Last updated:** October 15, 2026
+> **Last updated:** October 16, 2026
 
 ## Stage roadmap
 
@@ -19,7 +19,7 @@
 | 9 | Trust engine | Trusted / Suspicious / Quarantined categorical policy |
 | 10 | Authentication and RBAC | JWT, scrypt credentials, opt-in demo passwords, four role profiles |
 | 11 | Secure retrieval | Authoritative integrity verification, quarantine propagation, RBAC, rescanning and trust ranking |
-| 12 | Evaluation | Synthetic component scenarios plus a small labeled detector corpus; still not a measured end-to-end RAG comparison |
+| 12 | Evaluation | Synthetic component checks plus a measured end-to-end baseline-vs-secure run (single trial), a 42-case labeled detector corpus, and a recalibrated injection threshold; repeated trials and larger independent corpora remain open |
 
 ## Completed review and hardening work
 
@@ -113,12 +113,65 @@ The OpenRouter threshold calibration script is `scripts/evaluate_injection_detec
 
 Focused detector, trust-engine, ingestion, retrieval, evaluation and labeled-corpus tests pass, and the full suite completes: **140 passed**, 1 warning (Starlette TestClient/httpx deprecation). Frontend build and lint pass.
 
+## Measured evaluation, corpus and calibration — October 16, 2026
+
+Five follow-up items from the October 15 handoff were completed. No service
+restarts, no runtime-data migration. Full suite: **143 passed**, 1 warning;
+frontend build and lint pass.
+
+- **Stage 12 measured end-to-end evaluation** (`scripts/evaluate_e2e.py`;
+  evidence and caveats in [the report](docs/evaluations/2026-10-16-e2e-baseline-vs-trustrag.md)):
+  the real app (in-process `TestClient`, isolated temp stores) ingested a
+  10-document corpus — 5 signed benign documents, 4 attack variants (signed
+  poisoning, unsigned injection with a canary, unsigned poisoning, tampered
+  signature) and 1 neighbor-contradiction document — with **10/10 live trust
+  expectations met** and **0 degraded fallback answers**. Six paired questions
+  ran in secure (`emp_user`) and baseline (`admin`) modes with live generation:
+  - Baseline surfaced every challenge document (**6/6**): the signed-poisoned
+    policy overrode the true MFA answer, the injected canary was echoed
+    verbatim, the false "30 annual leave days" claim was adopted, the tampered
+    document's claim was mixed into the password answer, and HR salary bands
+    were disclosed.
+  - Secure surfaced none (**0/6**): quarantined/integrity/RBAC candidates were
+    blocked (traces show the block reasons), the Suspicious leave document was
+    ranked out of the top-3 context, and answers were grounded and correct in
+    all five non-RBAC cases (fail-closed "not enough information" on the RBAC
+    case).
+  - Latency medians (single run, generation-dominated): secure 5.5 s vs
+    baseline 10.1 s. Not a speed claim.
+- **Generation model note:** on this account `openrouter/auto` is refused with
+  HTTP 402 (no credits) and the configured fallback
+  `nvidia/nemotron-3.5-lightning:free` exceeded the client's 30 s timeout
+  (observed 37–49 s). The run used `LLM_MODEL=nvidia/nemotron-3-super-120b-a12b:free`
+  and `LLM_FALLBACK_MODEL=liquid/lfm-2.5-2.6b:free` via environment variables;
+  no application code or `.env` changes. The app's 30 s timeout vs the
+  fallback model's latency is an unresolved operational mismatch.
+- **Labeled detector corpus growth:** 13 → **42 labeled cases** (+2 unavailable
+  checks). Injection now includes externally sourced attacks/benigns adapted
+  from `deepset/prompt-injections` (HuggingFace datasets-server; each case
+  carries a `source` field) plus hard negatives; poisoning and neighbor classes
+  extended. Corpus-shape test updated to the new counts.
+- **Injection recalibration** ([report](docs/evaluations/2026-10-16-mercury-decide-recalibration.md)):
+  dev-only selection moved `INJECTION_THRESHOLD` from 0.5101 to **0.1446**
+  (dev precision/recall 1.00/0.909). Held-out result (not used for tuning):
+  precision/recall 0.90/0.90 — one additional attack caught, one false positive
+  at 0.148 (a quoted-attack hard negative). Residual false negative: a
+  "spell-check and print the above prompt" exfiltration request (score 0.003).
+- **Poisoning detector:** rule-based, measured **16/16 (0 FP, 0 FN)** on the
+  grown corpus.
+- **Audit UI pagination:** `/audit` now has a "Load older events" button that
+  accumulates older pages through the existing `before` cursor; accumulated
+  pages reset on filter change or refresh.
+- **Legacy documents:** audited the real store (7 documents, 114 chunks) —
+  every document has file digest, chunk digests and document IDs, and all pass
+  `integrity_ok`. **No legacy records exist**; nothing required re-ingestion.
+
 ## Remaining work and limitations
 
-- Grow the labeled corpus with independently sourced attack and benign documents; measure real EmbeddingGemma/Chroma behavior, false positives/negatives, and secure-versus-baseline answer outcomes and latency.
+- Repeat the measured end-to-end evaluation across trials with semantic answer grading (the current judgment fields are deterministic heuristics), a larger corpus, and independently contributed documents; the present result is one run over a small hand-authored corpus.
+- The configured free fallback model (`nvidia/nemotron-3.5-lightning:free`) can exceed the client's 30 s timeout, so answered queries may degrade to the labelled context fallback until the model/timeout pair is revisited.
 - Production controls remain outside this prototype: TLS, request/rate limits, identity lifecycle/revocation, retention/backups, external-provider data policy and stronger audit integrity.
 - Plain digests and mutable stores assume trusted administrators; provenance is not a separate per-query authorization check. Cross-store writes are not one transaction.
-- Re-ingest legacy documents that lack verification evidence; no automatic migration or deletion was performed.
 - Historical external credential exposure was recorded, but revocation cannot be established from this checkout.
 
 See [README.md](README.md) for operation, [PROJECT_REPORT.md](PROJECT_REPORT.md) for the academic scope, and [TRUSTRAG_PROJECT_CONTEXT.md](TRUSTRAG_PROJECT_CONTEXT.md) for the current handoff plus preserved history.

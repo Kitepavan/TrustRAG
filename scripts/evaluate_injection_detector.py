@@ -1,4 +1,10 @@
-"""Run a live OpenRouter threshold calibration and held-out report."""
+"""Run a live OpenRouter threshold calibration and held-out report.
+
+Injection metrics come from the live Mercury Decide classifier across the
+labeled corpus; poisoning metrics are computed offline against the same corpus
+because the poisoning detector is rule-based. Cases without an `expected`
+label (unavailable-check scenarios) are excluded from metrics.
+"""
 
 import json
 from pathlib import Path
@@ -6,6 +12,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from backend.security.injection_detector import scan_for_prompt_injection
+from backend.security.poison_detector import scan_for_knowledge_poisoning
 
 
 CORPUS_PATH = Path(__file__).parents[1] / "tests" / "fixtures" / "detection_corpus.json"
@@ -42,9 +49,19 @@ def select_threshold(labels: list[bool], scores: list[float]) -> float:
     return max(candidates, key=lambda threshold: (ranking(threshold)[0], -threshold))
 
 
+def _poisoning_metrics(cases: list[dict]) -> dict[str, int | float]:
+    """Rule-based poisoning detector metrics; no classifier call involved."""
+    labeled = [case for case in cases if case["class"] == "poisoning" and case["expected"] is not None]
+    labels = [case["expected"] for case in labeled]
+    scores = [1.0 if scan_for_knowledge_poisoning(case["text"])["is_poisoned"] else 0.0 for case in labeled]
+    return _metrics(labels, scores, 0.5)
+
+
 def _score_cases(cases: list[dict]) -> tuple[list[bool], list[float]]:
     labels, scores = [], []
     for case in cases:
+        if case["expected"] is None:
+            continue
         result = scan_for_prompt_injection(case["text"])
         if result.get("scan_status") != "complete":
             raise RuntimeError(f"Classifier unavailable for labeled case {case['id']}; no metrics reported")
@@ -54,6 +71,7 @@ def _score_cases(cases: list[dict]) -> tuple[list[bool], list[float]]:
 
 
 def _case_report(cases: list[dict], scores: list[float], threshold: float) -> list[dict]:
+    labeled = [case for case in cases if case["expected"] is not None]
     return [
         {
             "id": case["id"],
@@ -61,7 +79,7 @@ def _case_report(cases: list[dict], scores: list[float], threshold: float) -> li
             "yes_probability": score,
             "detected": score >= threshold,
         }
-        for case, score in zip(cases, scores)
+        for case, score in zip(labeled, scores)
     ]
 
 
@@ -81,6 +99,10 @@ def main() -> None:
         "development_cases": _case_report(development, dev_scores, threshold),
         "held_out": _metrics(holdout_labels, holdout_scores, threshold),
         "held_out_cases": _case_report(held_out, holdout_scores, threshold),
+        "poisoning_rule_based": {
+            "development": _poisoning_metrics(corpus["development"]),
+            "held_out": _poisoning_metrics(corpus["held_out"]),
+        },
         "next_step": "Confirm backend/security/injection_detector.py uses selected_threshold; do not tune on held_out results.",
     }, indent=2, sort_keys=True))
 

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { api } from '../services/api';
 import { useApi } from '../hooks/useApi';
 import PageHeader from '../components/PageHeader';
@@ -39,6 +39,38 @@ export default function AuditLog() {
     () => api.getAuditEvents(50, undefined, eventType || undefined, severity || undefined),
     [eventType, severity],
   );
+
+  // Older pages are accumulated client-side; undefined means "not yet paged".
+  const [older, setOlder] = useState<AuditEvent[]>([]);
+  const [olderCursor, setOlderCursor] = useState<number | null | undefined>(undefined);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const [olderError, setOlderError] = useState<string | null>(null);
+
+  // Filter changes and refreshes reset the accumulated pages to the latest 50.
+  useEffect(() => {
+    setOlder([]);
+    setOlderCursor(undefined);
+    setOlderError(null);
+  }, [eventType, severity, data]);
+
+  const nextCursor = olderCursor === undefined ? (data?.next_cursor ?? null) : olderCursor;
+
+  const loadOlder = async () => {
+    if (nextCursor == null || loadingOlder) return;
+    setLoadingOlder(true);
+    setOlderError(null);
+    try {
+      const page = await api.getAuditEvents(50, nextCursor, eventType || undefined, severity || undefined);
+      setOlder((prev) => [...prev, ...page.events]);
+      setOlderCursor(page.next_cursor);
+    } catch (err) {
+      setOlderError(err instanceof Error ? err.message : 'Unknown error');
+    } finally {
+      setLoadingOlder(false);
+    }
+  };
+
+  const allEvents = data ? [...data.events, ...older] : older;
 
   return (
     <div className="max-w-[1400px]">
@@ -105,7 +137,7 @@ export default function AuditLog() {
               </tr>
             </thead>
             <tbody>
-              {data.events.map((event) => (
+              {allEvents.map((event) => (
                 <tr key={event.id} className="border-b border-outline-variant hover:bg-surface-variant transition-colors align-top">
                   <td className="py-3 px-4 text-[12px] text-on-surface-variant whitespace-nowrap">
                     {new Date(event.timestamp).toLocaleTimeString()}
@@ -145,9 +177,19 @@ export default function AuditLog() {
               ))}
             </tbody>
           </table>
-          {data.next_cursor && (
-            <div className="p-3 text-center text-[12px] text-on-surface-variant border-t border-outline-variant">
-              Older events available (cursor {data.next_cursor}) — refine filters to view.
+          {(nextCursor != null || loadingOlder || olderError) && (
+            <div className="p-3 text-center text-[12px] text-on-surface-variant border-t border-outline-variant space-y-2">
+              {olderError && <div className="text-error">{olderError}</div>}
+              {nextCursor != null && (
+                <button
+                  type="button"
+                  onClick={() => void loadOlder()}
+                  disabled={loadingOlder}
+                  className="bg-transparent border border-outline-variant hover:bg-surface-variant text-on-surface py-1.5 px-4 rounded font-medium transition-colors disabled:opacity-50"
+                >
+                  {loadingOlder ? 'Loading older events...' : 'Load older events'}
+                </button>
+              )}
             </div>
           )}
         </div>

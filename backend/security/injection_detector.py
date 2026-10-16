@@ -10,7 +10,10 @@ import httpx
 
 DECISION_MODEL = "inception/mercury-decide:free"
 DECISION_URL = "https://openrouter.ai/api/v1/systemone"
-INJECTION_THRESHOLD = 0.5101005014718472
+# Selected October 16, 2026 by development-set F1 over the grown 19-case dev corpus
+# (ties favor recall; held-out FP/FN reported in docs/evaluations/). Provisional:
+# recalibrate as the labeled corpus grows; do not tune on held-out results.
+INJECTION_THRESHOLD = 0.14463688220177154
 SEGMENT_CHARS = 3500
 SEGMENT_OVERLAP = 256
 MAX_QUESTIONS_PER_REQUEST = 8
