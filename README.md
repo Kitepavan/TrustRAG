@@ -30,7 +30,7 @@ for the implementation history and [PROJECT_REPORT.md](PROJECT_REPORT.md) for li
 | Auth | JWT (HS256) Bearer tokens + RBAC clearance levels |
 | Embedding | EmbeddingGemma-300M (768-dim, local) |
 | Vector DB | ChromaDB (cosine similarity) |
-| LLM | OpenRouter; `LLM_MODEL` default `openrouter/auto`, free fallback via `LLM_FALLBACK_MODEL` |
+| LLM | OpenAI-compatible provider via `LLM_BASE_URL`/`LLM_API_KEY`; code default OpenRouter, local operation on Z.ai `glm-5-turbo` |
 | Frontend | React 19, TypeScript (strict), Vite, Tailwind CSS |
 
 ## Quick Start
@@ -51,17 +51,49 @@ test -e .env || cp .env.example .env
 
 | Variable | Required | Purpose |
 |----------|----------|---------|
-| `OPENROUTER_API_KEY` | Yes (for injection scanning and generation) | App boots without it; missing/unavailable classification quarantines ingestion and blocks secure retrieval candidates. Generation returns 502 if reached without a key; no eligible context returns 200 without an LLM call |
+| `LLM_BASE_URL` | No | Chat-completions base URL for the OpenAI-compatible generation client; code default `https://openrouter.ai/api/v1`, local operation uses `https://api.z.ai/api/paas/v4` |
+| `LLM_API_KEY` | Yes (for generation) | Key for the configured provider. The app boots without it; generation returns 502 if reached without a key, and no eligible context returns 200 without an LLM call |
+| `LLM_MODEL` | No | Answer model for that provider; code default `openrouter/auto`, local operation `glm-5-turbo` |
+| `LLM_FALLBACK_MODEL` | No | Substituted only when the primary is refused with HTTP 402; code default `nvidia/nemotron-3.5-lightning:free`, pinned to the primary locally (Z.ai refusals are account-level) |
+| `OPENROUTER_API_KEY` | No (legacy) | Historical default-provider key; only ever sent to `openrouter.ai`, and the bearer fallback for the default decision endpoint |
 | `TRUSTRAG_JWT_SECRET` | Yes (for login) | JWT signing secret. Generate one: `python -c "import secrets; print(secrets.token_urlsafe(48))"` |
 | `TRUSTRAG_DEMO_MODE` | No (`false`) | `true` enables the fixed demo passwords below. Without it, accounts authenticate via `TRUSTRAG_PASSWORD_HASH_<USERNAME>` scrypt hashes (format `salt_hex:hash_hex`) |
-| `LLM_MODEL` | No | Answer model; defaults to `openrouter/auto` |
-| `LLM_FALLBACK_MODEL` | No | Substituted when the primary is refused (HTTP 402); defaults to `nvidia/nemotron-3.5-lightning:free` |
+| `TRUSTRAG_DECISION_URL` | No | System One endpoint for injection scanning; defaults to OpenRouter |
+| `TRUSTRAG_DECISION_MODEL` | No | Classifier id for that endpoint; defaults to `inception/mercury-decide:free`; use `english` for local Laya |
+| `TRUSTRAG_DECISION_API_KEY` | No | Bearer for the decision endpoint; falls back to `OPENROUTER_API_KEY`. The local Laya classifier needs no key |
 | `EMBEDDING_MODEL_PATH` | No | Defaults to `/home/pavan/AI-Models/embeddinggemma-300m` |
 | `TRUSTRAG_ALLOWED_ORIGINS` | No | Comma-separated CORS origins; defaults to the Vite dev/build ports |
 
-Prompt-injection checks use `inception/mercury-decide:free` through OpenRouter's
-System One endpoint. `LLM_MODEL` configures answer generation separately. Scanned
-document text is sent to OpenRouter; the detector fails closed on provider errors.
+Answer generation uses the OpenAI-compatible provider selected by `LLM_BASE_URL`
+with `LLM_API_KEY` and `LLM_MODEL`; the local deployment runs Z.ai
+(`https://api.z.ai/api/paas/v4`, `glm-5-turbo`). Prompt-injection checks use a
+separate System One decision endpoint: by default `inception/mercury-decide:free`
+through OpenRouter, re-pointed by `TRUSTRAG_DECISION_URL` /
+`TRUSTRAG_DECISION_MODEL` at a locally served Laya classifier, which keeps
+scanned text on the machine. The detector fails closed on provider errors and on
+provider-reported state truncation.
+
+### Local decision classifier (optional)
+
+Run the English Laya checkpoint as the injection classifier to keep scanning off
+external providers and off the network:
+
+```bash
+LAYA_HOST=127.0.0.1 LAYA_PORT=8077 LAYA_DEVICE=cpu LAYA_PRELOAD=1 \
+  LAYA_MODELS=english LAYA_DEFAULT_MODEL=english \
+  /home/pavan/AI-Models/laya/.venv/bin/laya-serve
+```
+
+`./start.sh` also starts this server when port 8077 is free and stops it on
+Ctrl+C; an instance already running is reused and left running. The manual command
+above is only needed when launching the classifier on its own.
+
+Then set `TRUSTRAG_DECISION_URL=http://127.0.0.1:8077/v1/systemone` and
+`TRUSTRAG_DECISION_MODEL=english`. Keep the server running whenever uploads or
+secure queries happen: while it is unreachable, scans fail closed. Switching the
+classifier requires recalibrating `INJECTION_THRESHOLD` (script below). The
+October 17, 2026 measurement is recorded in
+[docs/evaluations/2026-10-17-laya-local-classifier-calibration.md](docs/evaluations/2026-10-17-laya-local-classifier-calibration.md).
 
 ### One-Command Launch
 
@@ -70,8 +102,10 @@ document text is sent to OpenRouter; the detector fails closed on provider error
 ```
 
 Then open [http://localhost:5173](http://localhost:5173) in your browser. The launcher
-expects an existing `.venv` and installed frontend dependencies; it is a development
-process, not a persistent service. Keep its terminal running.
+starts the backend, the frontend, and — when port 8077 is free — the local injection
+classifier (`laya-serve`); an already running classifier is reused. It expects an
+existing `.venv` and installed frontend dependencies; it is a development process,
+not a persistent service. Keep its terminal running.
 
 For a browser on another machine, configure `VITE_API_URL` in `frontend/.env.local`
 to a browser-reachable backend address and allow the frontend origin with
@@ -210,7 +244,7 @@ TrustRAG/
 │   │   ├── embedding.py        # EmbeddingGemma-300M integration
 │   │   ├── vectorstore.py      # ChromaDB store (incl. security metadata)
 │   │   ├── secure_retrieval.py # Quarantine + RBAC + injection filters, trust ranking
-│   │   └── llm.py              # OpenRouter client with untrusted-context prompt
+│   │   └── llm.py              # OpenAI-compatible LLM client with untrusted-context prompt
 │   └── security/
 │       ├── hashing.py          # SHA-256 digests
 │       ├── signature.py        # Ed25519 sign / verify
@@ -246,16 +280,20 @@ TrustRAG/
 PYTHONPATH=. .venv/bin/pytest tests/ -v
 ```
 
-Run the separate live injection-threshold evaluation with the configured OpenRouter key:
+Run the separate live injection-threshold evaluation against the configured decision
+endpoint (the local Laya classifier needs no provider quota):
 
 ```bash
 PYTHONPATH=. .venv/bin/python scripts/evaluate_injection_detector.py
 ```
 
-It sends only the labeled corpus (42 cases + 2 unavailable checks) to Mercury Decide, selects
-the cutoff (`0.14463688220177154`) on the development partition and reports the held-out
-partition without retuning it. A separate `scripts/evaluate_e2e.py` harness runs the measured
-end-to-end Baseline-vs-TrustRAG comparison.
+It sends only the labeled corpus (42 cases + 2 unavailable checks) to the configured
+classifier, selects the cutoff on the development partition and reports the held-out
+partition without retuning it. The current cutoff `0.35324999999999995` was selected
+against the locally served Laya English checkpoint (October 17, 2026; dev F1 0.917,
+held-out 0.842 — [report](docs/evaluations/2026-10-17-laya-local-classifier-calibration.md)).
+A separate `scripts/evaluate_e2e.py` harness runs the measured end-to-end
+Baseline-vs-TrustRAG comparison.
 
 Covers hashing, Ed25519 sign/verify (public-key-only verification), provenance, ingestion
 (valid/tampered/unsigned), both content detectors, the trust engine (including signed
@@ -265,10 +303,12 @@ baseline gating, bounded `top_k`, retrieval-time quarantine without a preceding 
 chunk-digest mismatch and corrupt metadata. Tests isolate file stores, keys, provenance
 and ChromaDB from real data. Audit tests cover event privacy at current call sites,
 privileged access, filtering/pagination and persistence failure. The latest full run
-passed **143 tests** with one Starlette TestClient warning. Unit tests mock the classifier;
-a separate live evaluation selected the injection threshold and the single-trial measured
-end-to-end comparison is recorded in `docs/evaluations/2026-10-16-e2e-baseline-vs-trustrag.md`
-and summarized in `PROJECT_REPORT.md`.
+passed **145 tests** with one Starlette TestClient warning. Unit tests mock the classifier;
+a separate live evaluation selects the injection threshold per classifier — most recently
+the locally served Laya English checkpoint, recorded in
+`docs/evaluations/2026-10-17-laya-local-classifier-calibration.md` — and the single-trial
+measured end-to-end comparison is recorded in
+`docs/evaluations/2026-10-16-e2e-baseline-vs-trustrag.md` and summarized in `PROJECT_REPORT.md`.
 
 Frontend checks:
 
@@ -284,7 +324,7 @@ npm --prefix frontend run lint
 - Ensure you're in the project root directory
 - Ensure the virtual environment is activated: `source .venv/bin/activate`
 - Check port 8000 is not in use: `lsof -i :8000`
-- The app boots without `OPENROUTER_API_KEY`, but prompt-injection scans fail closed: uploads are quarantined and secure retrieval candidates are blocked. Generation returns 502 when reached without a key. A query with no eligible context returns 200 without calling the answer model.
+- The app boots without `LLM_API_KEY`, but generation returns 502 when reached without one. Prompt-injection scans fail closed unless the configured decision endpoint answers: the default OpenRouter endpoint needs a key (`TRUSTRAG_DECISION_API_KEY` or `OPENROUTER_API_KEY`); the local Laya classifier needs none. While scanning is unavailable, uploads are quarantined and secure retrieval candidates are blocked. A query with no eligible context returns 200 without calling the answer model.
 
 ### 401 Not authenticated
 
@@ -356,8 +396,10 @@ Both SQLite audit events and JSON document provenance are mutable, **not cryptog
 tamper-evident**. The audit page's “tamper-resistant” wording is not an established security
 guarantee. Logging failures do not disable enforcement. The semantic injection classifier,
 regex-based poisoning checks, context delimiters and fixed trust scores do not establish
-complete attack prevention. Document text is sent to OpenRouter for injection scanning;
-operators must approve that external processing.
+complete attack prevention. Query context is sent to the configured generation provider
+(Z.ai in local operation) and document text to the configured decision endpoint for
+injection scanning (OpenRouter by default; the local Laya classifier keeps it on the
+machine). Operators must approve that external processing.
 
 ## Documentation map
 

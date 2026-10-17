@@ -12,7 +12,8 @@ npm --prefix frontend install
 npm --prefix frontend run dev -- --port 5173
 ```
 
-Start the backend separately on port 8000, or use `./start.sh` to launch both after
+Start the backend separately on port 8000, or use `./start.sh` to launch the stack
+(backend, frontend, and the local injection classifier when port 8077 is free) after
 dependencies are installed. Open [http://localhost:5173](http://localhost:5173).
 
 The API base defaults to `http://localhost:8000`. For another backend address, set

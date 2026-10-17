@@ -9,7 +9,7 @@ are superseded by this checkpoint and the linked current documents.
 ### What has been implemented
 
 - Stages 1–11: FastAPI ingestion, sentence-aware chunking, local EmbeddingGemma-300M
-  embeddings, ChromaDB persistence, OpenRouter generation, Ed25519/SHA-256 integrity,
+  embeddings, ChromaDB persistence, OpenAI-compatible LLM generation (Z.ai locally), Ed25519/SHA-256 integrity,
   heuristic content scans, categorical trust, JWT/RBAC and secure retrieval.
 - Stage 12: four synthetic component checks plus a single-trial measured end-to-end
   Baseline-vs-TrustRAG run (`scripts/evaluate_e2e.py`; evidence in
@@ -85,12 +85,22 @@ free generation model. Separately, the injection threshold was recalibrated to
 
 ### Current configuration and operation
 
-- LLM provider: **OpenRouter**. `LLM_MODEL` (default `openrouter/auto`) generates answers;
-  `LLM_FALLBACK_MODEL` (default `nvidia/nemotron-3.5-lightning:free`) is substituted when the
-  primary is refused with HTTP 402. `ZAI_API_KEY` and older Zai model references are obsolete.
-- Backend settings: `OPENROUTER_API_KEY`, `TRUSTRAG_JWT_SECRET`, `LLM_MODEL`,
-  `LLM_FALLBACK_MODEL`, `EMBEDDING_MODEL_PATH`, `TRUSTRAG_ALLOWED_ORIGINS`,
-  `TRUSTRAG_DEMO_MODE`, and `TRUSTRAG_PASSWORD_HASH_<USERNAME>` (uppercase username suffix).
+- LLM generation: any OpenAI-compatible provider via `LLM_BASE_URL` / `LLM_API_KEY` (code
+  default OpenRouter). Local operation uses the Z.ai API (`https://api.z.ai/api/paas/v4`) with
+  `LLM_MODEL=glm-5-turbo`; `LLM_FALLBACK_MODEL` (code default
+  `nvidia/nemotron-3.5-lightning:free`) is substituted only on HTTP 402, and the OpenRouter
+  key is only ever sent to openrouter.ai. `ZAI_API_KEY` is not used; the generic name is
+  `LLM_API_KEY`.
+- Injection classifier: the System One endpoint is configurable with `TRUSTRAG_DECISION_URL` /
+  `TRUSTRAG_DECISION_MODEL` (default OpenRouter Mercury Decide; local operation runs the Laya
+  English checkpoint at `http://127.0.0.1:8077/v1/systemone` with threshold
+  `0.35324999999999995`, dev-selected on the 42-case labeled corpus). `TRUSTRAG_DECISION_API_KEY`
+  optionally overrides the bearer; the local classifier needs none.
+- Backend settings: `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL`, `LLM_FALLBACK_MODEL`,
+  `OPENROUTER_API_KEY` (legacy default provider), `TRUSTRAG_DECISION_URL`,
+  `TRUSTRAG_DECISION_MODEL`, `TRUSTRAG_DECISION_API_KEY`, `TRUSTRAG_JWT_SECRET`,
+  `EMBEDDING_MODEL_PATH`, `TRUSTRAG_ALLOWED_ORIGINS`, `TRUSTRAG_DEMO_MODE`, and
+  `TRUSTRAG_PASSWORD_HASH_<USERNAME>` (uppercase username suffix).
 - Browser API setting: `VITE_API_URL` in `frontend/.env.local`; default localhost:8000.
   There is no Vite backend proxy. Remote browsers need a reachable API URL and allowed origin.
 - Start installed development environments with `./start.sh`; default backend/frontend

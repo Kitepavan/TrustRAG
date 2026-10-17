@@ -1,8 +1,8 @@
 # TrustRAG — Project Progress Tracker
 
-> **Current milestone:** Stages 1–11 implemented as an academic prototype; Stage 12 now includes a **measured** end-to-end baseline-vs-secure run (live classifier + live generation, isolated 10-document corpus, 6 paired questions), a 42-case labeled detector corpus, and a dev-selected injection threshold recalibration. Repeated trials and larger independent corpora remain open.
+> **Current milestone:** Stages 1–11 implemented as an academic prototype; Stage 12 now includes a **measured** end-to-end baseline-vs-secure run (live classifier + live generation, isolated 10-document corpus, 6 paired questions), a 42-case labeled detector corpus, and dev-selected injection thresholds — most recently against a **locally served Laya classifier**, with generation moved from OpenRouter to the **Z.ai API** (`glm-5-turbo`). Repeated trials and larger independent corpora remain open.
 >
-> **Last updated:** October 16, 2026
+> **Last updated:** October 17, 2026
 
 ## Stage roadmap
 
@@ -13,9 +13,9 @@
 | 3 | Chunking | Sentence-aware 512-character target and 64-character overlap; not token limits |
 | 4 | Embeddings | Local EmbeddingGemma-300M, 768 dimensions |
 | 5 | Vector persistence | ChromaDB cosine similarity, document IDs, classification, trust and digests |
-| 6 | RAG and frontend | OpenRouter; React 19/TypeScript/Vite/Tailwind; seven protected page routes |
+| 6 | RAG and frontend | OpenAI-compatible LLM (OpenRouter code default; Z.ai `glm-5-turbo` locally); React 19/TypeScript/Vite/Tailwind; seven protected page routes |
 | 7 | Document security | SHA-256, Ed25519 verification, mutable JSON provenance |
-| 8 | Content security | OpenRouter Mercury Decide semantic prompt-injection decisions, separate poisoning checks, and trust-weighted neighbor contradiction checks at ingestion and secure retrieval |
+| 8 | Content security | System One semantic prompt-injection decisions from a configurable endpoint (locally served Laya in local operation, OpenRouter Mercury Decide by default), separate poisoning checks, and trust-weighted neighbor contradiction checks at ingestion and secure retrieval |
 | 9 | Trust engine | Trusted / Suspicious / Quarantined categorical policy |
 | 10 | Authentication and RBAC | JWT, scrypt credentials, opt-in demo passwords, four role profiles |
 | 11 | Secure retrieval | Authoritative integrity verification, quarantine propagation, RBAC, rescanning and trust ranking |
@@ -28,7 +28,7 @@
 - Added `backend/security/document_store.py` as the shared authoritative metadata/integrity layer. Retrieval verifies the stored file and retained signature without relying on a preceding document-list request.
 - Integrity failures persist Quarantined status to metadata, ChromaDB and provenance. Missing authoritative evidence, legacy chunks without document IDs/digests, and modified chunk text fail closed.
 - Signed-but-poisoned documents are quarantined; unsigned clean documents remain Suspicious and rank below Trusted documents.
-- Prompt injection is classified through OpenRouter System One (`inception/mercury-decide:free`) using typed yes/no probabilities. Ingestion quarantines positive or unavailable scans; secure retrieval excludes positive or unavailable candidates in bounded batches. The current 0.5 cutoff is provisional until live development/holdout calibration succeeds. Document text is sent to OpenRouter.
+- Prompt injection is classified through a System One decision endpoint (`TRUSTRAG_DECISION_URL` / `TRUSTRAG_DECISION_MODEL`; OpenRouter `inception/mercury-decide:free` by default, a locally served Laya classifier in local operation) using typed yes/no probabilities. Ingestion quarantines positive or unavailable scans; secure retrieval excludes positive or unavailable candidates. The cutoff is selected on the labeled-corpus development partition by `scripts/evaluate_injection_detector.py` and recalibrated whenever the classifier or corpus changes. Scanned text goes to the configured endpoint only (OpenRouter by default).
 - Knowledge-poisoning detection remains a separate rule-based signal. The detector no longer strips quoted warning examples from source text; it classifies their intent semantically.
 - Neighbor anomaly checks compare claims with distinct semantically similar documents after authoritative file/signature and chunk-digest verification. Trusted sources are strong evidence; Suspicious sources are weak; Quarantined, missing, and integrity-failed sources cannot support a decision.
 - Two independent Trusted sources with no conflicting Trusted neighbor can quarantine a contradiction. A lone or mixed contradiction becomes Suspicious. An incomplete neighbor check cannot promote ingestion to Trusted and blocks the candidate from secure retrieval. These checks remain heuristics, not complete protection.
@@ -49,10 +49,10 @@
 - Documents supports classification and optional base64 signature inputs, shows actual trust status, and keys rows by document ID.
 - `useApi` ignores stale request results and invalidates pending results on cleanup; it does not cancel the requests.
 - Chat offers baseline only to privileged roles and displays pipeline traces returned with successful query responses.
-- Secure chat scans the user's question with Mercury Decide before embedding or retrieval; positive or unavailable scans stop the secure request and produce a security trace. Baseline skips this query scan for controlled comparisons.
+- Secure chat scans the user's question with the configured injection classifier before embedding or retrieval; positive or unavailable scans stop the secure request and produce a security trace. Baseline skips this query scan for controlled comparisons.
 - Baseline comparison returns raw top-K retrieval chunks and uses a plain generation prompt without TrustRAG trust labels or secure-context guardrails. Secure mode keeps trust-aware filtering and context boundaries. Baseline is restricted to Admin/IT_Security and intended for synthetic demonstrations.
 - In a recent manual attack-fixture comparison, Baseline surfaced the fixture's text in its answer while the model declined to follow its malicious instructions; TrustRAG returned an insufficient-context answer. That result alone does not prove which filtering step blocked the fixture; use the pipeline trace to confirm the retrieval reason.
-- OpenRouter replaced the historical Zai provider. Key lookup is lazy; transient provider failures (rate limit/5xx/network) retry and return a labelled context fallback, while permanent 4xx errors fail fast with 502. A missing key returns 502 only when generation is reached; no eligible context returns 200 without calling the provider.
+- The generation provider is configurable (`LLM_BASE_URL` / `LLM_API_KEY`, OpenAI-compatible chat completions): OpenRouter is the code default and local operation uses the Z.ai API with `glm-5-turbo`, moving answer generation off OpenRouter's free-model quota (October 17, 2026 — see the section below). Key lookup is lazy and the OpenRouter key is only sent to OpenRouter itself; transient provider failures (rate limit/5xx/network) retry and return a labelled context fallback, while permanent 4xx errors fail fast with 502. A missing key returns 502 only when generation is reached; no eligible context returns 200 without calling the provider.
 - Evaluation labels now distinguish check pass counts and `suite_duration_ms` from attack efficacy and RAG latency overhead. Status indicators distinguish configured/not-checked components from real probes.
 
 ### Latest review pass — October 15, 2026
@@ -166,10 +166,71 @@ frontend build and lint pass.
   every document has file digest, chunk digests and document IDs, and all pass
   `integrity_ok`. **No legacy records exist**; nothing required re-ingestion.
 
+## Local decision classifier — October 17, 2026
+
+OpenRouter's free-model allowance was being spent mostly on classification:
+a secure query cost up to three or four classifier requests (query scan,
+retrieval rescans, generation) against a 50-request daily free quota. The
+injection classifier now runs locally with `laya-serve`
+(`convaiinnovations/laya`, English checkpoint, CPU, `127.0.0.1:8077`); the change is
+scoped to the classifier client, its configuration and its traces. Answer generation
+moved to the Z.ai API the same day — see the next section.
+
+- **Endpoint is configurable:** `TRUSTRAG_DECISION_URL` /
+  `TRUSTRAG_DECISION_MODEL` (code defaults unchanged: OpenRouter Mercury
+  Decide). The local server answers the same `/v1/systemone` contract, ignores
+  the sent bearer, and needs no new Python dependencies in the project venv.
+- **Measured client-shape selection (development partition only):** the
+  original detector wording scored dev F1 0.880; the preset-style wording
+  ("instructions aimed at the AI system rather than a genuine user request")
+  scored **0.917**. Multi-item states collapsed discrimination entirely
+  (dev F1 0.786 at eight items per request), so the detector sends **one
+  segment per request**; 2000-character segments (down from 3500) fit the
+  served model's token window, and provider-reported truncation now fails
+  closed. Evidence:
+  [the calibration report](docs/evaluations/2026-10-17-laya-local-classifier-calibration.md).
+- **Calibrated threshold:** `INJECTION_THRESHOLD` 0.14463688220177154 →
+  **0.35324999999999995** (dev precision/recall 0.846/1.000; ties favor recall).
+  Held-out result (not used for tuning): 0.889/0.800 — one quoted-attack false
+  positive and two false negatives. Mercury Decide measured 0.952/0.900 on the
+  same corpus; the local model is weaker on quoted-attack hard negatives and two
+  exfiltration paraphrases. Documented, not hidden.
+- **Tests and latency:** two new detector tests (endpoint env override,
+  truncation fail-closed); full suite **145 passed**, 1 warning. Local scanning
+  measured ~0.5–0.8 s per single-item request (35 corpus scans in 22.5 s).
+- **Operational note:** `laya-serve` must run whenever uploads or secure queries
+  happen; while it is unreachable, scans fail closed by design. `./start.sh` now
+  launches it too when port 8077 is free, reuses an already-running instance and
+  stops only the server it started. The backend must be restarted after this
+  change (`.env` and module constants are read at import).
+
+## Generation provider moved to Z.ai — October 17, 2026
+
+The free-model allowance that prompted the classifier move also fed answer generation;
+OpenRouter's account quota (0/50 remaining) produced 429s and labelled fallback answers.
+Generation now runs against the Z.ai API through the same OpenAI-compatible client,
+removing that dependency.
+
+- **Configurable provider:** `LLM_BASE_URL` / `LLM_API_KEY` select any chat-completions
+  API (code default OpenRouter). The local `.env` uses `https://api.z.ai/api/paas/v4`
+  with `LLM_MODEL=glm-5-turbo`; retry, 402 substitution, degraded-notice and the 120 s
+  timeout are unchanged.
+- **Key isolation:** the OpenRouter key is only ever sent to `openrouter.ai`; a
+  non-OpenRouter base URL without `LLM_API_KEY` fails with a clear error instead of
+  leaking that credential to another provider.
+- **Scanning unaffected:** the decision endpoint now accepts `TRUSTRAG_DECISION_API_KEY`
+  and needs no key at all for local Laya, so the injection path no longer depends on
+  `OPENROUTER_API_KEY`.
+- **Status surfaces:** `/dashboard/stats` and `/status` report the provider name derived
+  from `LLM_BASE_URL`; the frontend displays that value instead of a hardcoded name.
+- **Verification:** full suite **150 passed**, 1 warning; frontend build and lint pass.
+  **No live Z.ai call yet** — the local `.env` has an empty `LLM_API_KEY`; paste one in
+  and restart the backend (env is read at import).
+
 ## Remaining work and limitations
 
 - Repeat the measured end-to-end evaluation across trials with semantic answer grading (the current judgment fields are deterministic heuristics), a larger corpus, and independently contributed documents; the present result is one run over a small hand-authored corpus.
-- The configured free fallback model (`nvidia/nemotron-3.5-lightning:free`) can exceed the client's 30 s timeout, so answered queries may degrade to the labelled context fallback until the model/timeout pair is revisited.
+- The code-default free fallback model (`nvidia/nemotron-3.5-lightning:free`) measured 37–49 s per answer; the client's 120 s read timeout covers it, and local operation pins `LLM_FALLBACK_MODEL` to the primary model instead.
 - Production controls remain outside this prototype: TLS, request/rate limits, identity lifecycle/revocation, retention/backups, external-provider data policy and stronger audit integrity.
 - Plain digests and mutable stores assume trusted administrators; provenance is not a separate per-query authorization check. Cross-store writes are not one transaction.
 - Historical external credential exposure was recorded, but revocation cannot be established from this checkout.

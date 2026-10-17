@@ -28,7 +28,8 @@ $$\text{Retrieval Decision} = \text{Relevance} + \text{Trust Status} + \text{Aut
 - **Cryptography:** Python `cryptography` package (Ed25519 signatures, SHA-256 digests)
 - **Embedding Model:** Google `EmbeddingGemma-300M` (local 768-dim vectors via SentenceTransformers)
 - **Vector Database:** ChromaDB (`data/chroma_db/`, Cosine similarity)
-- **LLM:** OpenRouter; `LLM_MODEL` (default `openrouter/auto`) with `LLM_FALLBACK_MODEL` (default `nvidia/nemotron-3.5-lightning:free`) substituted when the primary model is refused with HTTP 402
+- **LLM:** Any OpenAI-compatible chat-completions provider via `LLM_BASE_URL`/`LLM_API_KEY`; code default OpenRouter, local operation uses the Z.ai API (`https://api.z.ai/api/paas/v4`) with `LLM_MODEL=glm-5-turbo`. `LLM_FALLBACK_MODEL` (code default `nvidia/nemotron-3.5-lightning:free`) is substituted only when the primary model is refused with HTTP 402
+- **Injection classifier:** System One `/v1/systemone` contract; endpoint configurable with `TRUSTRAG_DECISION_URL`/`TRUSTRAG_DECISION_MODEL` (default OpenRouter Mercury Decide; locally served Laya English checkpoint at `127.0.0.1:8077` in local operation)
 - **Frontend:** React 19, TypeScript (strict), Vite, Tailwind CSS v4 (Cyber-Metric Security Dark Theme under `frontend/`)
 
 ---
@@ -42,7 +43,7 @@ $$\text{Retrieval Decision} = \text{Relevance} + \text{Trust Status} + \text{Aut
 | **Stage 3** | Text Chunking | ✅ Complete | Sentence-aware chunker (512 chars, 64 overlap) |
 | **Stage 4** | Embedding Generation | ✅ Complete | EmbeddingGemma-300M 768-dim local execution |
 | **Stage 5** | Vector Store Persistence | ✅ Complete | ChromaDB persistent store with chunk metadata |
-| **Stage 6** | Baseline RAG & UI | ✅ Complete | OpenRouter LLM integration + 7-page React dashboard including privileged Audit Log |
+| **Stage 6** | Baseline RAG & UI | ✅ Complete | OpenAI-compatible LLM integration (OpenRouter code default; Z.ai locally) + 7-page React dashboard including privileged Audit Log |
 | **Stage 7** | Document Security | ✅ Complete | Ed25519 digital signatures, SHA-256 hashing, provenance logging |
 | **Stage 8** | Content Security | ✅ Complete | Knowledge-poisoning & indirect prompt-injection detection |
 | **Stage 9** | Trust Engine | ✅ Complete | Categorical trust scoring & policy engine (`Trusted` / `Suspicious` / `Quarantined`) |
@@ -62,6 +63,7 @@ $$\text{Retrieval Decision} = \text{Relevance} + \text{Trust Status} + \text{Aut
 5. **Authoritative integrity:** `document_store.py` verifies current file/signature evidence and persists quarantine across metadata, vectors and provenance. Secure retrieval also checks chunk digests; legacy records lacking evidence require re-ingestion (the October 16, 2026 audit of the real store found none).
 6. **Audit telemetry:** SQLite events in `data/security_audit.sqlite3`; `/audit/events` is Admin/IT_Security-only. Current upload/query call sites omit prompts, document text and secrets. Telemetry is best-effort, mutable and not cryptographically tamper-evident. JSON provenance is also mutable, not a separate provenance authorization gate.
 7. **Frontend sessions:** Explicit sign-in, sessionStorage, logout/401 unmounting; sign out to switch accounts. `useApi` ignores stale results. Seven routes include `/audit`, with event filters, trace display and "Load older events" pagination.
+8. **Injection classifier endpoint:** One System One client, two backends. Code defaults remain OpenRouter Mercury Decide; local operation runs `laya-serve` (`convaiinnovations/laya` English checkpoint, CPU, `127.0.0.1:8077`) with `TRUSTRAG_DECISION_*`. Client shape measured October 17, 2026: preset `prompt_injection` wording, one segment per request (multi-item states broke key-following), 2000-char segments (longer states truncate), truncation fails closed. `INJECTION_THRESHOLD = 0.35324999999999995` is development-partition-selected for that classifier and is classifier-specific: recalibrate via `scripts/evaluate_injection_detector.py` whenever the classifier or corpus changes.
 
 ---
 
@@ -74,7 +76,7 @@ TrustRAG/
 ├── PROJECT_REPORT.md           # Academic project report
 ├── TRUSTRAG_PROJECT_CONTEXT.md # Comprehensive project history & context notes
 ├── requirements.txt            # Python dependencies (cryptography, pytest, fastapi, chromadb)
-├── start.sh                    # Dual startup script for backend & frontend
+├── start.sh                    # Launcher: classifier (if 8077 free) + backend + frontend
 ├── backend/
 │   ├── main.py                 # FastAPI application root
 │   ├── api/
@@ -90,14 +92,14 @@ TrustRAG/
 │   │   ├── embedding.py        # EmbeddingGemma model wrapper
 │   │   ├── vectorstore.py      # ChromaDB interface (stores security metadata)
 │   │   ├── secure_retrieval.py # Defense-in-depth top-K retrieval engine
-│   │   └── llm.py              # OpenRouter wrapper with security system prompt
+│   │   └── llm.py              # OpenAI-compatible LLM wrapper with security system prompt
 │   └── security/
 │       ├── document_store.py  # Authoritative integrity & quarantine propagation
 │       ├── audit.py           # SQLite upload/query telemetry
 │       ├── hashing.py          # SHA-256 hashing utilities
 │       ├── signature.py        # Ed25519 sign & verify module
 │       ├── provenance.py       # Provenance record & JSON logger
-│       ├── injection_detector.py # Indirect prompt injection scanner
+│       ├── injection_detector.py # System One injection classifier client (Mercury Decide default; local Laya via env)
 │       ├── poison_detector.py    # Knowledge poisoning detector
 │       ├── trust_engine.py       # Multi-signal Trust Engine
 │       ├── auth.py               # JWT authentication & RBAC clearance
@@ -141,7 +143,8 @@ TrustRAG/
 
 - **Frontend checks:** `npm --prefix frontend run build` (tsc + vite) and `npm --prefix frontend run lint`.
 - **Required Environment (`.env`, copied from `.env.example`):**
-  - `OPENROUTER_API_KEY` — OpenRouter LLM key. The app boots without it; generation returns 502 if reached without a key. No eligible context returns 200 without calling the LLM.
+  - `LLM_API_KEY` / `LLM_BASE_URL` / `LLM_MODEL` — generation provider config (any OpenAI-compatible API). Local `.env`: Z.ai `https://api.z.ai/api/paas/v4` + `glm-5-turbo`. The app boots without a key; generation returns 502 if reached without one. No eligible context returns 200 without calling the LLM.
+  - `OPENROUTER_API_KEY` — historical default-provider key; only ever sent to openrouter.ai, and the decision-endpoint bearer fallback when `TRUSTRAG_DECISION_API_KEY` is unset.
   - `TRUSTRAG_JWT_SECRET` — JWT signing secret (generate with `python -c "import secrets; print(secrets.token_urlsafe(48))"`). Login fails closed if unset. Tests set a fallback via `tests/conftest.py`.
 
 - **Run Automated Tests:**
@@ -156,12 +159,20 @@ TrustRAG/
   ```bash
   ./start.sh
   ```
+- **Start the Local Injection Classifier (optional; required when `TRUSTRAG_DECISION_URL` points at it):**
+  ```bash
+  LAYA_HOST=127.0.0.1 LAYA_PORT=8077 LAYA_DEVICE=cpu LAYA_PRELOAD=1 LAYA_MODELS=english LAYA_DEFAULT_MODEL=english /home/pavan/AI-Models/laya/.venv/bin/laya-serve
+  ```
+  `./start.sh` starts it automatically when port 8077 is free (log: `/tmp/trustrag-laya-serve.log`), stops only the instance it started, and reuses an already-running one.
 - **Rule for Code Modification:** Never declare success without running `pytest` verification commands. Preserve existing comments and docstrings. Maintain modularity so baseline RAG remains intact for Stage 12 academic comparison.
 
 
 ## 7. Latest verified handoff — October 17, 2026
 
-- Full pytest suite: **143 passed, 1 warning** (Starlette TestClient/httpx deprecation); re-verified October 17, 2026. Recent commits: `1aae4cf` security-review fixes (deletion clearance, evaluation detection metric, LLM 4xx fail-fast, request-local verification cache, demo-status endpoint, POST-only `/evaluation/run`), `bc2712f` measured baseline-vs-secure end-to-end evaluation + detector recalibration, `c014f3a` 402→free-model fallback. Frontend build passed; lint reported zero errors/warnings. The measured E2E run used a live classifier and a substituted free generation model; no browser acceptance test was run.
+- **Generation moved to Z.ai:** the OpenAI-compatible client now takes its provider from `LLM_BASE_URL`/`LLM_API_KEY`; the local `.env` uses `https://api.z.ai/api/paas/v4` with `glm-5-turbo`, so answer generation no longer depends on OpenRouter's free-model quota. The OpenRouter key is only ever sent to openrouter.ai, and injection scanning (local Laya) needs no key at all. `/dashboard/stats` and `/status` report the provider derived from the base URL. **Live verification pending:** the `.env` has no Z.ai key yet; paste one in and restart the backend (env is read at import).
+- **Local injection classifier:** the System One client now has a configurable endpoint (`TRUSTRAG_DECISION_URL`/`TRUSTRAG_DECISION_MODEL`) and runs against a local `laya-serve` (`convaiinnovations/laya` English checkpoint, CPU, `127.0.0.1:8077`) in local operation, keeping scanning off OpenRouter's free-model quota. Measured on the labeled corpus: dev F1 0.917 (P 0.846 / R 1.000) at `INJECTION_THRESHOLD = 0.35324999999999995`; held-out (reporting only) 0.842. The client sends one 2000-char segment per request and fails closed on provider-reported truncation. Evidence: [docs/evaluations/2026-10-17-laya-local-classifier-calibration.md](docs/evaluations/2026-10-17-laya-local-classifier-calibration.md).
+- Full pytest suite: **145 passed, 1 warning** (Starlette TestClient/httpx deprecation); verified October 17, 2026. Earlier commits: `1aae4cf` security-review fixes (deletion clearance, evaluation detection metric, LLM 4xx fail-fast, request-local verification cache, demo-status endpoint, POST-only `/evaluation/run`), `bc2712f` measured baseline-vs-secure end-to-end evaluation + detector recalibration, `c014f3a` 402→free-model fallback. Frontend build passed; lint reported zero errors/warnings; the frontend was untouched by the classifier change. The measured E2E run used a live classifier and a substituted free generation model; no browser acceptance test has run with the local classifier yet.
+- The running backend must be restarted after the classifier change (`.env` and module constants are read at import). `laya-serve` must be running whenever uploads or secure queries happen; while it is unreachable, every scan fails closed by design.
 - Server recovery (September 17, 2026): suspended processes were replaced; `/health`, frontend HTTP 200 and employee demo login succeeded. Demo mode was enabled locally; provider key was empty at that check. Do not assume those processes remain running or that HTTP 200 proves LLM generation.
 - Current setup and limitations: [README.md](README.md), [PROGRESS.md](PROGRESS.md), [PROJECT_REPORT.md](PROJECT_REPORT.md). The lower section of `TRUSTRAG_PROJECT_CONTEXT.md` is preserved historical material, not current setup guidance.
 - Honor the user's explicit constraint: do not use OpenCode/opencode-orchestrator for implementation.
