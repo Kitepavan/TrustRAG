@@ -1,11 +1,9 @@
-import os
-
 from fastapi import APIRouter, Depends
 from backend.security.auth import get_current_user_required
 
 from backend.rag.vectorstore import get_collection_count
 from backend.api.documents import get_metadata_store
-from backend.rag.llm import LLM_MODEL
+from backend.rag.llm import LLM_MODEL, LLM_PROVIDER, llm_configured
 
 router = APIRouter(tags=["dashboard"], dependencies=[Depends(get_current_user_required)])
 
@@ -30,9 +28,9 @@ def get_dashboard_stats():
         "chunks_stored": chunk_count,
         "vector_db_status": vector_db_status,
         "embedding_model": "EmbeddingGemma-300M",
-        "llm_provider": "OpenRouter",
+        "llm_provider": LLM_PROVIDER,
         "llm_model": LLM_MODEL,
-        "llm_status": "configured" if os.environ.get("OPENROUTER_API_KEY", "").strip() else "not_configured",
+        "llm_status": "configured" if llm_configured() else "not_configured",
         "rag_status": rag_status,
     }
 
@@ -45,7 +43,7 @@ def get_system_status():
         "backend": {"status": "online", "version": "0.1.0", "detail": "FastAPI"},
         "embedding_model": {"status": "not_checked", "name": "EmbeddingGemma-300M", "dimensions": 768},
         "vector_db": {"status": "connected", "engine": "ChromaDB", "metric": "cosine"},
-        "llm": {"status": "configured" if os.environ.get("OPENROUTER_API_KEY", "").strip() else "not_configured", "provider": "OpenRouter", "model": LLM_MODEL},
+        "llm": {"status": "configured" if llm_configured() else "not_configured", "provider": LLM_PROVIDER, "model": LLM_MODEL},
         "rag_pipeline": {"status": "not_checked", "detail": "Secure RAG; end-to-end readiness not probed"},
     }
 

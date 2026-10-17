@@ -168,7 +168,7 @@ export default function Dashboard() {
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <p className="text-[11px] font-medium uppercase tracking-[0.09em] text-on-surface-variant">LLM provider</p>
-            <p className="mt-1 text-[13px] font-medium text-on-surface">{stats?.llm_provider ?? 'OpenRouter'}</p>
+            <p className="mt-1 text-[13px] font-medium text-on-surface">{stats?.llm_provider ?? '—'}</p>
           </div>
           <div>
             <p className="text-[11px] font-medium uppercase tracking-[0.09em] text-on-surface-variant">Answer model</p>

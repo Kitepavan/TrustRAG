@@ -112,7 +112,7 @@ export default function Chat() {
             <div className="flex items-center space-x-2">
               <div className="hidden sm:flex items-center space-x-1.5 px-2.5 py-1 bg-surface-container border border-outline-variant rounded text-[11px] text-on-surface-variant font-mono">
                 <span className="w-2 h-2 rounded-full bg-secondary"></span>
-                <span>OpenRouter · {stats?.llm_model?.split('/').pop() ?? 'model pending'}</span>
+                <span>{stats?.llm_provider ?? 'LLM'} · {stats?.llm_model?.split('/').pop() ?? 'model pending'}</span>
               </div>
               <div className="flex items-center space-x-2 bg-surface-container p-1 rounded-lg border border-outline-variant">
                 <button
@@ -225,7 +225,7 @@ export default function Chat() {
           {isLoading && (
             <div className="flex items-center space-x-2 text-on-surface-variant text-[14px] p-4">
               <span className="material-symbols-outlined animate-spin text-primary">sync</span>
-              <span>Evaluating trust policy & querying OpenRouter LLM...</span>
+              <span>Evaluating trust policy & querying the LLM...</span>
             </div>
           )}
 

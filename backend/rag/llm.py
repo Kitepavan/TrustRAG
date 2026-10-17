@@ -10,12 +10,22 @@ load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-LLM_BASE_URL = "https://openrouter.ai/api/v1/"
-# OpenRouter is OpenAI-compatible. `openrouter/auto` routes to a capable model
-# automatically; the free model is a per-request substitute for accounts that the
-# provider refuses to serve the primary for billing reasons.
+DEFAULT_LLM_BASE_URL = "https://openrouter.ai/api/v1"
+# Generation uses any OpenAI-compatible chat-completions API. The code default is
+# OpenRouter (`openrouter/auto` routes to a capable model automatically); local
+# operation points LLM_BASE_URL at Z.ai instead, e.g.
+# LLM_BASE_URL=https://api.z.ai/api/paas/v4 with LLM_MODEL=glm-5-turbo.
+LLM_BASE_URL = (os.environ.get("LLM_BASE_URL", "").strip() or DEFAULT_LLM_BASE_URL).rstrip("/") + "/"
 LLM_MODEL = os.environ.get("LLM_MODEL", "openrouter/auto")
+# Consulted only when the primary model is refused with HTTP 402 (OpenRouter's
+# billing refusal). Z.ai refusals are account-level, not model-level; pin this to
+# LLM_MODEL there to disable the substitute.
 LLM_FALLBACK_MODEL = os.environ.get("LLM_FALLBACK_MODEL", "nvidia/nemotron-3.5-lightning:free")
+
+# Human-readable provider name for the dashboard and status endpoints.
+_PROVIDER_NAMES = {"openrouter.ai": "OpenRouter", "api.z.ai": "Z.ai"}
+_LLM_HOST = httpx.URL(LLM_BASE_URL).host or LLM_BASE_URL
+LLM_PROVIDER = _PROVIDER_NAMES.get(_LLM_HOST, _LLM_HOST)
 
 SYSTEM_PROMPT = (
     "You are a helpful assistant. Answer the user's question based ONLY on the "
@@ -38,17 +48,32 @@ def _build_baseline_context(context_chunks: list[dict]) -> str:
     )
 
 
+def _provider_api_key() -> str:
+    """Provider key: LLM_API_KEY first; the OpenRouter key only feeds OpenRouter itself."""
+    key = os.environ.get("LLM_API_KEY", "").strip()
+    if key:
+        return key
+    if httpx.URL(LLM_BASE_URL).host == httpx.URL(DEFAULT_LLM_BASE_URL).host:
+        return os.environ.get("OPENROUTER_API_KEY", "").strip()
+    return ""
+
+
+def llm_configured() -> bool:
+    """True when a generation key is configured; used by the status endpoints."""
+    return bool(_provider_api_key())
+
+
 def _get_api_key() -> str:
-    """Resolve the OpenRouter API key lazily so the FastAPI app can boot without it set.
+    """Resolve the provider API key lazily so the FastAPI app can boot without it set.
 
     Raising at import time took down /health and every other endpoint; failing at
     call time confines the outage to the query path (returned as HTTP 502).
     """
-    key = os.environ.get("OPENROUTER_API_KEY", "").strip()
+    key = _provider_api_key()
     if not key:
         raise RuntimeError(
-            "OPENROUTER_API_KEY environment variable is not set. "
-            "Copy .env.example to .env and set your OpenRouter key."
+            f"No LLM API key is configured for {LLM_BASE_URL}. Set LLM_API_KEY in .env "
+            "(or OPENROUTER_API_KEY when using the default OpenRouter endpoint)."
         )
     return key
 
@@ -59,7 +84,7 @@ def generate_answer(
     max_retries: int = 3,
     mode: str = "secure",
 ) -> str:
-    """Send query + context to OpenRouter and get an answer with bounded linear backoff retries."""
+    """Send query + context to the configured provider and get an answer with bounded linear backoff retries."""
     if mode not in {"secure", "baseline"}:
         raise ValueError("Invalid generation mode")
     if mode == "baseline":
@@ -93,7 +118,7 @@ def generate_answer(
 
     api_key = _get_api_key()
 
-    # Try the configured model first; substitute the free model only when the provider
+    # Try the configured model first; substitute the fallback only when the provider
     # refuses to serve it for billing reasons (402), which switching can actually fix.
     models = [LLM_MODEL] if LLM_FALLBACK_MODEL == LLM_MODEL else [LLM_MODEL, LLM_FALLBACK_MODEL]
     model_index = 0
@@ -102,21 +127,23 @@ def generate_answer(
     for attempt in range(1, max_retries + 1):
         payload["model"] = models[model_index]
         try:
-            with httpx.Client(timeout=30.0) as client:
+            # Free-tier models can take 40-80 s; a 30 s read timeout made every generation
+            # degrade to the labelled fallback. Allow slow-but-working models to answer.
+            with httpx.Client(timeout=120.0) as client:
                 resp = client.post(
                     f"{LLM_BASE_URL}chat/completions",
                     json=payload,
                     headers={
                         "Authorization": f"Bearer {api_key}",
                         "Content-Type": "application/json",
-                        # OpenRouter attribution headers (optional, but recommended).
+                        # Optional attribution header; OpenRouter reads it, other providers ignore it.
                         "X-Title": "TrustRAG",
                     },
                 )
 
             if resp.status_code == 429 and attempt < max_retries:
                 wait_time = attempt * 1.5
-                logger.warning(f"OpenRouter rate limited (429). Retrying in {wait_time}s (attempt {attempt}/{max_retries})...")
+                logger.warning(f"LLM provider rate limited (429). Retrying in {wait_time}s (attempt {attempt}/{max_retries})...")
                 time.sleep(wait_time)
                 continue
 
@@ -125,10 +152,10 @@ def generate_answer(
         except httpx.HTTPStatusError as error:
             status_code = error.response.status_code
 
-            # Billing refusal is model-specific: the free model may still answer.
+            # Billing refusal is model-specific: the fallback model may still answer.
             if status_code == 402 and model_index + 1 < len(models):
                 logger.warning(
-                    f"OpenRouter refused {models[model_index]} with HTTP 402; "
+                    f"Provider refused {models[model_index]} with HTTP 402; "
                     f"falling back to {models[model_index + 1]}."
                 )
                 model_index += 1
@@ -137,7 +164,7 @@ def generate_answer(
             # Permanent client errors (invalid key, malformed request) cannot succeed
             # on retry; surface them instead of degrading to a misleading fallback.
             if 400 <= status_code < 500 and status_code != 429:
-                logger.error(f"OpenRouter rejected the request with HTTP {status_code}; not retrying: {error}")
+                logger.error(f"Provider rejected the request with HTTP {status_code}; not retrying: {error}")
                 raise
             last_error = error
             if attempt < max_retries:
@@ -147,7 +174,7 @@ def generate_answer(
             if attempt < max_retries:
                 time.sleep(1.0 * attempt)
 
-    logger.error(f"OpenRouter API call failed after {max_retries} attempts: {last_error}")
+    logger.error(f"LLM provider call failed after {max_retries} attempts: {last_error}")
 
     # Degraded-mode fallback: LLM unreachable, so surface the retrieved context with
     # an explicit notice rather than silently impersonating a model answer.

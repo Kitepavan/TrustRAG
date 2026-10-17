@@ -27,8 +27,9 @@ def _capture_payload(monkeypatch):
         def __exit__(self, *_args):
             pass
 
-        def post(self, _url, *, json, **_kwargs):
+        def post(self, url, *, json, **_kwargs):
             captured.update(json)
+            captured["_url"] = url
             return _Response()
 
     monkeypatch.setattr(llm, "_get_api_key", lambda: "test-key")
@@ -141,3 +142,37 @@ def test_billing_refusal_falls_back_to_free_model(monkeypatch):
 
     assert answer == "answer"
     assert requested_models == ["openrouter/auto", "nvidia/nemotron-3.5-lightning:free"]
+
+
+def test_generation_posts_to_configured_provider_base_url(monkeypatch):
+    captured = _capture_payload(monkeypatch)
+    monkeypatch.setattr(llm, "LLM_BASE_URL", "https://api.z.ai/api/paas/v4/")
+
+    llm.generate_answer("Is MFA required?", [_quarantined_chunk()], mode="secure")
+
+    assert captured["_url"] == "https://api.z.ai/api/paas/v4/chat/completions"
+
+
+def test_api_key_resolution_prefers_llm_api_key(monkeypatch):
+    monkeypatch.setenv("LLM_API_KEY", "provider-key")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "legacy-key")
+    assert llm._get_api_key() == "provider-key"
+
+    monkeypatch.delenv("LLM_API_KEY")
+    monkeypatch.setattr(llm, "LLM_BASE_URL", llm.DEFAULT_LLM_BASE_URL)
+    assert llm._get_api_key() == "legacy-key"
+
+    monkeypatch.delenv("OPENROUTER_API_KEY")
+    assert llm.llm_configured() is False
+    with pytest.raises(RuntimeError):
+        llm._get_api_key()
+
+
+def test_openrouter_key_is_not_sent_to_other_providers(monkeypatch):
+    monkeypatch.delenv("LLM_API_KEY", raising=False)
+    monkeypatch.setenv("OPENROUTER_API_KEY", "legacy-key")
+    monkeypatch.setattr(llm, "LLM_BASE_URL", "https://api.z.ai/api/paas/v4/")
+
+    assert llm.llm_configured() is False
+    with pytest.raises(RuntimeError):
+        llm._get_api_key()

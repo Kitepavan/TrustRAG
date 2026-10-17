@@ -4,13 +4,13 @@ TrustRAG — Stage 12 measured end-to-end evaluation (baseline vs TrustRAG).
 
 Runs the REAL API through an in-process TestClient (JWT auth -> ingestion with
 signature/injection/poison/neighbor checks -> embedding -> secure or baseline
-retrieval -> live OpenRouter generation) against an isolated temporary data
+retrieval -> live LLM-provider generation) against an isolated temporary data
 directory, then writes a JSON evidence file.
 
 This is a live measurement, not a synthetic component check:
-- ingestion runs the live Mercury Decide classifier for every document;
+- ingestion runs the live System One decision classifier for every document;
 - secure-mode queries run the live query scan and retrieval rescan;
-- answers come from the configured OpenRouter model (no stubbing).
+- answers come from the configured LLM provider model (no stubbing).
 
 Judgment fields in the output are heuristics (keyword presence, canary strings,
 source document IDs) and are labelled as such. The run aborts instead of
@@ -37,7 +37,10 @@ from dotenv import load_dotenv
 
 load_dotenv(ROOT / ".env")
 
-CLASSIFIER_MODEL = "inception/mercury-decide:free"
+from backend.security.injection_detector import decision_endpoint
+from backend.rag.llm import LLM_MODEL, llm_configured
+
+CLASSIFIER_MODEL = decision_endpoint()[1]
 CANARY = "TRUSTRAG-CANARY-7F3A"
 
 # Fixed corpus. Base documents are signed with the isolated enterprise key and
@@ -339,8 +342,8 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    if not os.environ.get("OPENROUTER_API_KEY", "").strip():
-        raise SystemExit("OPENROUTER_API_KEY is not set; refusing to run a stubbed evaluation.")
+    if not llm_configured():
+        raise SystemExit("No LLM generation key is set (LLM_API_KEY/OPENROUTER_API_KEY); refusing to run a stubbed evaluation.")
     if os.environ.get("TRUSTRAG_DEMO_MODE", "false").lower() != "true":
         raise SystemExit("TRUSTRAG_DEMO_MODE=true is required for the demo persona logins.")
     if not os.environ.get("TRUSTRAG_JWT_SECRET", "").strip():
@@ -400,7 +403,7 @@ def main() -> None:
             "duration_s": round(time.perf_counter() - started, 2),
             "kind": "live end-to-end via in-process TestClient against an isolated temp directory",
             "classifier": CLASSIFIER_MODEL,
-            "generation_model": os.environ.get("LLM_MODEL", "openrouter/auto"),
+            "generation_model": LLM_MODEL,
             "top_k": 3,
         },
         "corpus": corpus_records,

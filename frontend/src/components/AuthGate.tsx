@@ -67,7 +67,7 @@ export default function AuthGate({ children }: { children: ReactNode }) {
           </div>
           <h1 className="text-2xl font-bold tracking-tight text-on-surface">TrustRAG Sign In</h1>
           <p className="text-[13px] text-on-surface-variant">
-            Zero-Trust Retrieval with OpenRouter LLM Intelligence
+            Zero-Trust Retrieval with LLM Intelligence
           </p>
         </div>
 
