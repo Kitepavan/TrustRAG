@@ -45,6 +45,8 @@ def test_scanner_uses_systemone_and_reads_typed_yes_probability(monkeypatch):
 
     monkeypatch.setattr(detector.httpx, "Client", Client)
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    monkeypatch.delenv("TRUSTRAG_DECISION_URL", raising=False)
+    monkeypatch.delenv("TRUSTRAG_DECISION_MODEL", raising=False)
 
     result = detector.scan_for_prompt_injection("A hidden instruction for the assistant.")
 
@@ -144,8 +146,9 @@ def test_long_text_is_segmented_and_any_positive_segment_blocks(monkeypatch):
         def __exit__(self, *_args): return False
         def post(self, _url, *, json, **_kwargs):
             calls.append(json)
+            positive = len(calls) == 2
             answers = {
-                key: {"type": "noul", "noul": 1.0 if key == "item_1" else 0.1}
+                key: {"type": "noul", "noul": 1.0 if positive else 0.1}
                 for key in json["questions"]
             }
             return FakeResponse({"answers": answers})
@@ -190,6 +193,9 @@ def test_any_segment_provider_failure_keeps_whole_document_unavailable(monkeypat
 
 def test_missing_key_fails_closed_without_text_in_error(monkeypatch):
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    monkeypatch.delenv("TRUSTRAG_DECISION_API_KEY", raising=False)
+    monkeypatch.delenv("TRUSTRAG_DECISION_URL", raising=False)
+    monkeypatch.delenv("TRUSTRAG_DECISION_MODEL", raising=False)
     text = "private text that must not be returned"
 
     result = detector.scan_for_prompt_injection(text)
@@ -215,7 +221,7 @@ def test_retrieval_batch_preserves_keys_and_fails_closed_for_failed_batch(monkey
         def __exit__(self, *_args): return False
         def post(self, _url, *, json, **_kwargs):
             calls.append(json)
-            return FakeResponse(_fake_answers(item_0=0.1, item_1=0.9))
+            return FakeResponse(_fake_answers(item_0=0.1 if len(calls) == 1 else 0.9))
 
     monkeypatch.setattr(detector.httpx, "Client", Client)
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
@@ -227,5 +233,91 @@ def test_retrieval_batch_preserves_keys_and_fails_closed_for_failed_batch(monkey
 
     assert results["chunk-a"]["is_injection"] is False
     assert results["chunk-b"]["is_injection"] is True
-    assert len(calls) == 1
-    assert set(calls[0]["questions"]) == {"item_0", "item_1"}
+    assert [json.loads(call["state"])["item_0"] for call in calls] == [
+        "supplier requirement", "instruction-like content",
+    ]
+
+
+def test_decision_endpoint_env_override(monkeypatch):
+    calls = []
+
+    class Client:
+        def __init__(self, **_kwargs): pass
+        def __enter__(self): return self
+        def __exit__(self, *_args): return False
+        def post(self, url, *, json, headers):
+            calls.append((url, json, headers))
+            return FakeResponse(_fake_answers(item_0=0.9))
+
+    monkeypatch.setattr(detector.httpx, "Client", Client)
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    monkeypatch.setenv("TRUSTRAG_DECISION_URL", "http://127.0.0.1:8077/v1/systemone")
+    monkeypatch.setenv("TRUSTRAG_DECISION_MODEL", "english")
+
+    result = detector.scan_for_prompt_injection("Text to inspect")
+
+    assert result["is_injection"] is True
+    url, payload, _headers = calls[0]
+    assert url == "http://127.0.0.1:8077/v1/systemone"
+    assert payload["model"] == "english"
+
+
+def test_truncated_state_fails_closed(monkeypatch):
+    class Client:
+        def __init__(self, **_kwargs): pass
+        def __enter__(self): return self
+        def __exit__(self, *_args): return False
+        def post(self, *_args, **_kwargs):
+            return FakeResponse({**_fake_answers(item_0=0.0), "usage": {"truncated": True}})
+
+    monkeypatch.setattr(detector.httpx, "Client", Client)
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+
+    result = detector.scan_for_prompt_injection("Text to inspect")
+
+    assert result["scan_status"] == "unavailable"
+    assert result["is_injection"] is True
+
+
+def test_decision_api_key_preferred_over_openrouter_key(monkeypatch):
+    calls = []
+
+    class Client:
+        def __init__(self, **_kwargs): pass
+        def __enter__(self): return self
+        def __exit__(self, *_args): return False
+        def post(self, url, *, json, headers):
+            calls.append((url, headers))
+            return FakeResponse(_fake_answers(item_0=0.1))
+
+    monkeypatch.setattr(detector.httpx, "Client", Client)
+    monkeypatch.setenv("TRUSTRAG_DECISION_API_KEY", "decision-key")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "legacy-key")
+    monkeypatch.setenv("TRUSTRAG_DECISION_URL", "http://127.0.0.1:8077/v1/systemone")
+
+    result = detector.scan_for_prompt_injection("Text to inspect")
+
+    assert result["is_injection"] is False
+    assert calls[0][1]["Authorization"] == "Bearer decision-key"
+
+
+def test_custom_endpoint_without_any_key_sends_no_authorization(monkeypatch):
+    calls = []
+
+    class Client:
+        def __init__(self, **_kwargs): pass
+        def __enter__(self): return self
+        def __exit__(self, *_args): return False
+        def post(self, url, *, json, headers):
+            calls.append((url, headers))
+            return FakeResponse(_fake_answers(item_0=0.1))
+
+    monkeypatch.setattr(detector.httpx, "Client", Client)
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    monkeypatch.delenv("TRUSTRAG_DECISION_API_KEY", raising=False)
+    monkeypatch.setenv("TRUSTRAG_DECISION_URL", "http://127.0.0.1:8077/v1/systemone")
+
+    result = detector.scan_for_prompt_injection("Supplier text")
+
+    assert result["is_injection"] is False and result["scan_status"] == "complete"
+    assert "Authorization" not in calls[0][1]

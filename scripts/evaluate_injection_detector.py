@@ -1,9 +1,11 @@
-"""Run a live OpenRouter threshold calibration and held-out report.
+"""Run a live System One threshold calibration and held-out report.
 
-Injection metrics come from the live Mercury Decide classifier across the
-labeled corpus; poisoning metrics are computed offline against the same corpus
-because the poisoning detector is rule-based. Cases without an `expected`
-label (unavailable-check scenarios) are excluded from metrics.
+Injection metrics come from the live decision endpoint configured through
+TRUSTRAG_DECISION_URL / TRUSTRAG_DECISION_MODEL (Mercury Decide by default, the
+locally served Laya classifier during local operation) across the labeled
+corpus; poisoning metrics are computed offline against the same corpus because
+the poisoning detector is rule-based. Cases without an `expected` label
+(unavailable-check scenarios) are excluded from metrics.
 """
 
 import json
@@ -11,7 +13,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from backend.security.injection_detector import scan_for_prompt_injection
+from backend.security.injection_detector import decision_endpoint, scan_for_prompt_injection
 from backend.security.poison_detector import scan_for_knowledge_poisoning
 
 
@@ -91,8 +93,10 @@ def main() -> None:
     dev_labels, dev_scores = _score_cases(development)
     threshold = select_threshold(dev_labels, dev_scores)
     holdout_labels, holdout_scores = _score_cases(held_out)
+    url, model = decision_endpoint()
     print(json.dumps({
-        "model": "inception/mercury-decide:free",
+        "model": model,
+        "decision_url": url,
         "threshold_selected_on": "development",
         "selected_threshold": threshold,
         "development": _metrics(dev_labels, dev_scores, threshold),

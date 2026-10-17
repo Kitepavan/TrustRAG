@@ -86,7 +86,7 @@ def query_rag(
             pipeline_log.append({
                 "stage": "prompt_security",
                 "status": "blocked",
-                "message": f"Mercury Decide flagged this query as prompt injection (risk score: {prompt_scan['risk_score']:.3f}); retrieval and generation stopped.",
+                "message": f"Injection classifier flagged this query as prompt injection (risk score: {prompt_scan['risk_score']:.3f}); retrieval and generation stopped.",
             })
             return {
                 **finish("QUERY_BLOCKED_PROMPT_INJECTION", "warning"),
@@ -99,7 +99,7 @@ def query_rag(
         pipeline_log.append({
             "stage": "prompt_security",
             "status": "passed",
-            "message": f"Mercury Decide cleared this query (risk score: {prompt_scan['risk_score']:.3f}).",
+            "message": f"Injection classifier cleared this query (risk score: {prompt_scan['risk_score']:.3f}).",
         })
 
     try:
