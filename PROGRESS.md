@@ -62,7 +62,7 @@ evidence) found one failing test and several hardening/optimization gaps. All we
 verified and committed (`1aae4cf`, pushed to `origin/master`).
 
 - **Failing test:** `tests/test_audit.py` query-trace mocks did not accept the new `mode`
-  argument. The suite now runs clean at **140 passed**, 1 warning.
+  argument. The suite ran clean at **140 passed**, 1 warning (143 after the October 16 work).
 - **Deletion clearance:** `delete_document` now requires clearance for the document's
   classification, not only an Admin/IT_Security role. An IT_Security user can no longer
   delete HR_CONFIDENTIAL data they cannot read.

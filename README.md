@@ -11,12 +11,13 @@ defense-in-depth security controls. Retrieval candidates are evaluated on releva
 on signature validity, trust status, RBAC clearance, provenance, and content scans before
 they ever reach the LLM.
 
-**Status — September 17, 2026:** Stages 1–11 are implemented as an academic prototype.
-Stage 12 provides four synthetic component checks, not a measured end-to-end
-Baseline-versus-TrustRAG attack experiment. The current checkout also includes structured
+**Status — October 17, 2026:** Stages 1–11 are implemented as an academic prototype.
+Stage 12 provides four synthetic component checks **and** a single-trial measured end-to-end
+Baseline-versus-TrustRAG run (`scripts/evaluate_e2e.py`, 10-document corpus, live classifier
+and generation). The current checkout also includes structured
 security audit events and a seventh web page for privileged audit access.
 
-Latest verification: **140 backend tests passed** (one dependency deprecation warning),
+Latest verification: **143 backend tests passed** (one dependency deprecation warning),
 frontend build passed, and lint reported no warnings/errors. See [PROGRESS.md](PROGRESS.md)
 for the implementation history and [PROJECT_REPORT.md](PROJECT_REPORT.md) for limitations.
 
@@ -29,7 +30,7 @@ for the implementation history and [PROJECT_REPORT.md](PROJECT_REPORT.md) for li
 | Auth | JWT (HS256) Bearer tokens + RBAC clearance levels |
 | Embedding | EmbeddingGemma-300M (768-dim, local) |
 | Vector DB | ChromaDB (cosine similarity) |
-| LLM | OpenRouter (`nvidia/nemotron-3.5-lightning:free`) |
+| LLM | OpenRouter; `LLM_MODEL` default `openrouter/auto`, free fallback via `LLM_FALLBACK_MODEL` |
 | Frontend | React 19, TypeScript (strict), Vite, Tailwind CSS |
 
 ## Quick Start
@@ -53,7 +54,8 @@ test -e .env || cp .env.example .env
 | `OPENROUTER_API_KEY` | Yes (for injection scanning and generation) | App boots without it; missing/unavailable classification quarantines ingestion and blocks secure retrieval candidates. Generation returns 502 if reached without a key; no eligible context returns 200 without an LLM call |
 | `TRUSTRAG_JWT_SECRET` | Yes (for login) | JWT signing secret. Generate one: `python -c "import secrets; print(secrets.token_urlsafe(48))"` |
 | `TRUSTRAG_DEMO_MODE` | No (`false`) | `true` enables the fixed demo passwords below. Without it, accounts authenticate via `TRUSTRAG_PASSWORD_HASH_<USERNAME>` scrypt hashes (format `salt_hex:hash_hex`) |
-| `LLM_MODEL` | No | Defaults to `nvidia/nemotron-3.5-lightning:free` |
+| `LLM_MODEL` | No | Answer model; defaults to `openrouter/auto` |
+| `LLM_FALLBACK_MODEL` | No | Substituted when the primary is refused (HTTP 402); defaults to `nvidia/nemotron-3.5-lightning:free` |
 | `EMBEDDING_MODEL_PATH` | No | Defaults to `/home/pavan/AI-Models/embeddinggemma-300m` |
 | `TRUSTRAG_ALLOWED_ORIGINS` | No | Comma-separated CORS origins; defaults to the Vite dev/build ports |
 
@@ -250,8 +252,10 @@ Run the separate live injection-threshold evaluation with the configured OpenRou
 PYTHONPATH=. .venv/bin/python scripts/evaluate_injection_detector.py
 ```
 
-It sends only the labeled synthetic corpus to Mercury Decide, selects the cutoff on the
-development partition and reports the held-out partition without retuning it.
+It sends only the labeled corpus (42 cases + 2 unavailable checks) to Mercury Decide, selects
+the cutoff (`0.14463688220177154`) on the development partition and reports the held-out
+partition without retuning it. A separate `scripts/evaluate_e2e.py` harness runs the measured
+end-to-end Baseline-vs-TrustRAG comparison.
 
 Covers hashing, Ed25519 sign/verify (public-key-only verification), provenance, ingestion
 (valid/tampered/unsigned), both content detectors, the trust engine (including signed
@@ -261,9 +265,10 @@ baseline gating, bounded `top_k`, retrieval-time quarantine without a preceding 
 chunk-digest mismatch and corrupt metadata. Tests isolate file stores, keys, provenance
 and ChromaDB from real data. Audit tests cover event privacy at current call sites,
 privileged access, filtering/pagination and persistence failure. The latest full run
-passed **140 tests** with one Starlette TestClient warning. Unit tests mock the classifier;
-a separate live synthetic-corpus evaluation selected the injection threshold and is
-summarized in `PROJECT_REPORT.md`.
+passed **143 tests** with one Starlette TestClient warning. Unit tests mock the classifier;
+a separate live evaluation selected the injection threshold and the single-trial measured
+end-to-end comparison is recorded in `docs/evaluations/2026-10-16-e2e-baseline-vs-trustrag.md`
+and summarized in `PROJECT_REPORT.md`.
 
 Frontend checks:
 
@@ -331,7 +336,8 @@ recovery record, not a current uptime guarantee. Live chat generation was not ve
 - Provider HTTP/network/response failures: bounded retries followed normally by a labelled
   retrieved-context fallback (HTTP 200), not a generated model answer.
 - Legacy records missing integrity evidence must be re-ingested; they are not silently
-  migrated or promoted to Trusted.
+  migrated or promoted to Trusted. An October 16, 2026 audit of the real store (7 documents,
+  114 chunks) found no such records.
 
 ## Audit telemetry and limitations
 
@@ -343,7 +349,8 @@ contents, tokens and secrets. This is not a comprehensive HTTP/login audit trail
 `GET /audit/events` accepts `limit` (1–100, default 50), `before` (sequence cursor),
 `event_type` and `severity` (`info`, `warning`, `error`), returning newest-first `events`
 and `next_cursor`. Only Admin/IT_Security can read it. The current UI displays the first
-50 matching events and indicates a next cursor, but does not load older pages.
+50 matching events and loads older pages through a "Load older events" button (accumulated
+pages reset on filter change or refresh).
 
 Both SQLite audit events and JSON document provenance are mutable, **not cryptographically
 tamper-evident**. The audit page's “tamper-resistant” wording is not an established security

@@ -1,6 +1,6 @@
 # TrustRAG — Current Handoff and Historical Context
 
-## Current checkpoint — October 15, 2026
+## Current checkpoint — October 17, 2026
 
 This section is the current handoff. Everything under **Historical archive** below is
 preserved project history: its “current”, “next”, provider, test-count and setup claims
@@ -11,8 +11,11 @@ are superseded by this checkpoint and the linked current documents.
 - Stages 1–11: FastAPI ingestion, sentence-aware chunking, local EmbeddingGemma-300M
   embeddings, ChromaDB persistence, OpenRouter generation, Ed25519/SHA-256 integrity,
   heuristic content scans, categorical trust, JWT/RBAC and secure retrieval.
-- Stage 12: four synthetic component checks. Baseline outcomes are unfiltered-control
-  assumptions, not measured end-to-end LLM attacks. Suite duration is not RAG latency overhead.
+- Stage 12: four synthetic component checks plus a single-trial measured end-to-end
+  Baseline-vs-TrustRAG run (`scripts/evaluate_e2e.py`; evidence in
+  `docs/evaluations/2026-10-16-e2e-baseline-vs-trustrag.md`). The component suite still uses
+  unfiltered-control assumptions and its duration is not RAG latency overhead. Repeat trials,
+  semantic grading and a larger independent corpus remain open.
 - React 19/TypeScript/Vite/Tailwind frontend with seven routes: Dashboard, Documents,
   Chat, Evaluation, Audit Log, Knowledge Base and Status. Sign-in is required; baseline
   and audit access are limited to Admin/IT_Security.
@@ -24,7 +27,8 @@ are superseded by this checkpoint and the linked current documents.
    provenance without requiring a prior listing request.
 2. Secure retrieval fails closed on missing/invalid evidence, checks file/chunk digests,
    rescans injection/poisoning and ranks Trusted before Suspicious. Signed poisoned
-   content is quarantined. Legacy incomplete records require re-ingestion, not auto-promotion.
+   content is quarantined. Legacy incomplete records require re-ingestion, not auto-promotion;
+   an October 16, 2026 audit of the real store found none.
 3. All sensitive APIs require JWTs. Document listing/details enforce classification;
    uploads cannot exceed caller clearance. Baseline authorization is enforced both at
    the API and shared retrieval function. Upload attribution comes from authentication.
@@ -44,14 +48,15 @@ are superseded by this checkpoint and the linked current documents.
    sites omit prompts, document contents, tokens and secrets. Query diagnostics include
    request IDs, stage traces, durations and persistence status. `GET /audit/events`
    requires Admin/IT_Security and supports filters/cursors. The UI displays recent
-   events but does not load older pages. This is best-effort mutable telemetry, not a
-   cryptographically tamper-evident or comprehensive access log.
+   events and loads older pages via a "Load older events" button. This is best-effort
+   mutable telemetry, not a cryptographically tamper-evident or comprehensive access log.
 
 ### Latest review pass — October 15, 2026
 
 A full code review (backend, frontend, tests, scripts) with the suite run as evidence found
 one failing test plus hardening and optimization gaps. All were fixed, verified (**140 passed**,
-1 warning; frontend build/lint clean) and committed and pushed as `1aae4cf`:
+1 warning at the time; 143 after the October 16 additions; frontend build/lint clean) and
+committed and pushed as `1aae4cf`:
 
 - `delete_document` now enforces classification clearance, not just an Admin/IT_Security role.
 - An unavailable injection classifier no longer counts as a detection in `/evaluation/run`.
@@ -64,13 +69,28 @@ one failing test plus hardening and optimization gaps. All were fixed, verified 
 - `/evaluation/run` is POST-only.
 - Smaller consistency and cleanup fixes; regression tests added for each behavioral change.
 
+### Measured Stage 12 evaluation — October 16, 2026
+
+The synthetic component checks are no longer the primary Stage 12 evidence. `scripts/evaluate_e2e.py`
+drives the real app (in-process `TestClient`, isolated temp stores) through login → upload →
+ingestion → embed → ChromaDB → secure/baseline retrieval → live generation, over a 10-document
+corpus and 6 paired questions. Single-trial results: 10/10 live trust expectations met; Baseline
+surfaced every challenge document (6/6), Secure none (0/6); the canary and HR salary bands leaked
+in Baseline only; Secure answers were correct in all five non-RBAC cases. Caveats: one run per
+question, small hand-authored corpus, deterministic heuristic judgment fields and a substituted
+free generation model. Separately, the injection threshold was recalibrated to
+`0.14463688220177154` on a grown 42-case labeled corpus (dev precision/recall 1.00/0.91; held-out
+0.90/0.90) and the poisoning detector measured 16/16 (0 FP, 0 FN). See
+[the E2E report](docs/evaluations/2026-10-16-e2e-baseline-vs-trustrag.md).
+
 ### Current configuration and operation
 
-- LLM provider: **OpenRouter**, default `nvidia/nemotron-3.5-lightning:free`.
-  `ZAI_API_KEY` and older Zai model references in the archive are obsolete.
+- LLM provider: **OpenRouter**. `LLM_MODEL` (default `openrouter/auto`) generates answers;
+  `LLM_FALLBACK_MODEL` (default `nvidia/nemotron-3.5-lightning:free`) is substituted when the
+  primary is refused with HTTP 402. `ZAI_API_KEY` and older Zai model references are obsolete.
 - Backend settings: `OPENROUTER_API_KEY`, `TRUSTRAG_JWT_SECRET`, `LLM_MODEL`,
-  `EMBEDDING_MODEL_PATH`, `TRUSTRAG_ALLOWED_ORIGINS`, `TRUSTRAG_DEMO_MODE`, and
-  `TRUSTRAG_PASSWORD_HASH_<USERNAME>` (uppercase username suffix).
+  `LLM_FALLBACK_MODEL`, `EMBEDDING_MODEL_PATH`, `TRUSTRAG_ALLOWED_ORIGINS`,
+  `TRUSTRAG_DEMO_MODE`, and `TRUSTRAG_PASSWORD_HASH_<USERNAME>` (uppercase username suffix).
 - Browser API setting: `VITE_API_URL` in `frontend/.env.local`; default localhost:8000.
   There is no Vite backend proxy. Remote browsers need a reachable API URL and allowed origin.
 - Start installed development environments with `./start.sh`; default backend/frontend
@@ -91,7 +111,7 @@ restarting services; resume the correct suspended job from its owning terminal w
 
 ### Fresh verification and remaining scope
 
-- Full suite: **140 passed, 1 warning**; warning is Starlette TestClient/httpx deprecation.
+- Full suite: **143 passed, 1 warning**; warning is Starlette TestClient/httpx deprecation.
 - Frontend production build passed; lint reported zero warnings and zero errors.
 - Focused protected-endpoint authentication matrix: **16 passed**.
 - Checks used isolated runtime stores. No live OpenRouter or browser GUI acceptance was
