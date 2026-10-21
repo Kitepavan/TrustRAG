@@ -1,8 +1,8 @@
 # TrustRAG — Project Progress Tracker
 
-> **Current milestone:** Stages 1–11 implemented as an academic prototype; Stage 12 now includes a **measured** end-to-end baseline-vs-secure run (live classifier + live generation, isolated 10-document corpus, 6 paired questions), a 42-case labeled detector corpus, and dev-selected injection thresholds — most recently against a **locally served Laya classifier**, with generation moved from OpenRouter to the **Z.ai API** (`glm-5-turbo`). Repeated trials and larger independent corpora remain open.
+> **Current milestone:** Stages 1–11 implemented as an academic prototype; Stage 12 now includes a **measured** end-to-end baseline-vs-secure run (live classifier + live generation, isolated 10-document corpus, 6 paired questions), a 42-case labeled detector corpus, and dev-selected injection thresholds — most recently against a **locally served Laya classifier**, with generation moved from OpenRouter to the **Z.ai API** (`glm-5-turbo`). Live Z.ai generation and a 1440 × 1024 browser acceptance run were verified on October 18, 2026. Repeated trials and larger independent corpora remain open.
 >
-> **Last updated:** October 17, 2026
+> **Last updated:** October 18, 2026
 
 ## Stage roadmap
 
@@ -224,8 +224,38 @@ removing that dependency.
 - **Status surfaces:** `/dashboard/stats` and `/status` report the provider name derived
   from `LLM_BASE_URL`; the frontend displays that value instead of a hardcoded name.
 - **Verification:** full suite **150 passed**, 1 warning; frontend build and lint pass.
-  **No live Z.ai call yet** — the local `.env` has an empty `LLM_API_KEY`; paste one in
-  and restart the backend (env is read at import).
+  **No live Z.ai call in that change** — the local `.env` key was empty at the time.
+  Live generation and the full pipeline were verified the next day; see the
+  October 18 section below.
+
+## Live Z.ai generation and browser acceptance — October 18, 2026
+
+Both open verification gaps from the October 17 handoff were closed on a full
+local stack (Vite `:5173` → FastAPI `:8000` → `laya-serve` `:8077` → Z.ai).
+Evidence: [report](docs/evaluations/2026-10-18-live-zai-and-browser-acceptance.md)
+and [screenshots/results](docs/evaluations/assets/2026-10-18-live-acceptance/).
+
+- **Live Z.ai generation:** a direct `generate_answer` call returned the exact
+  supplied fact in **8.37 s** with no degraded fallback; a secure `POST /query`
+  as `emp_user` returned a grounded 3-source answer with the local classifier
+  clearing the query at risk 0.014. A hostile query was blocked at risk 1.000
+  with retrieval and generation stopped.
+- **Browser acceptance:** 13/13 Playwright checks passed at 1440 × 1024
+  (sign-in gate, demo-mode gating, authenticated shell, layout, provider chip
+  `Z.ai · glm-5-turbo`, live answer with citations and trace, blocked injection,
+  no console/network errors after sign-in). No application code or `.env` changes.
+- **Desktop fidelity:** `design-qa.md` P3 is closed — at 1440 × 1024 the dashboard
+  renders the 232 px desktop sidebar, single-row five-column metrics, one-row
+  eight-stage pipeline and no horizontal overflow.
+- **Latency (single machine, not a benchmark):** warm secure query 39.4–41.0 s,
+  browser 40.7 s. Breakdown: query scan 0.60 s, embedding 2.83 s (cold process),
+  retrieval + 9-candidate rescan + neighbor checks 14.16 s, Z.ai generation
+  26.67 s. A blocked injection query returns in 1.4 s. Generation dominates and
+  scales with context length; no optimization was attempted.
+- **Corpus state:** the store holds 3 readable `Suspicious` supplier PDFs and 4
+  `Quarantined` attack fixtures, so this run's citations are all `Suspicious`;
+  `Trusted`-above-`Suspicious` ranking remains covered by the test suite and the
+  October 16 measured evaluation.
 
 ## Remaining work and limitations
 

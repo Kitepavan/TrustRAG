@@ -16,7 +16,7 @@ from backend.security.text_normalization import normalize_security_text, remove_
 # check: that approach flagged clean docs that merely contained the word "disabled".
 POISON_PATTERNS = [
     (r"(?i)passwords?\s+(?:is|are)?\s*(?:no\s+longer|not)\s+(?:required|needed|mandatory)", "POISON_PASSWORD_POLICY_DISABLED"),
-    (r"(?i)passwords?\s+(?:is|are)\s+(?:disabled|unnecessary|optional)", "POISON_PASSWORD_POLICY_DISABLED"),
+    (r"(?i)(?<!demo )passwords?\s+(?:is|are)\s+(?:disabled|unnecessary|optional)", "POISON_PASSWORD_POLICY_DISABLED"),
     (r"(?i)mfa\s+(?:is)?\s*(?:no\s+longer|not)\s+(?:required|needed|mandatory)", "POISON_MFA_DISABLED"),
     (r"(?i)mfa\s+(?:is)?\s+(?:disabled|unnecessary|optional)", "POISON_MFA_DISABLED"),
     (r"(?i)encryption\s+(?:is)?\s*(?:disabled|unnecessary|not\s+enforced|turned\s+off)", "POISON_ENCRYPTION_DISABLED"),

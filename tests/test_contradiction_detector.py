@@ -36,7 +36,14 @@ def stub_query(texts, statuses=None, document_ids=None, scores=None):
     return q
 
 
-def scan_with_sources(monkeypatch, text, neighbors, verified=None, exclude_document_id=None):
+def scan_with_sources(
+    monkeypatch,
+    text,
+    neighbors,
+    verified=None,
+    exclude_document_id=None,
+    exclude_sha256=None,
+):
     verified = verified or {
         neighbor["metadata"]["document_id"]: {
             "document_id": neighbor["metadata"]["document_id"],
@@ -54,6 +61,7 @@ def scan_with_sources(monkeypatch, text, neighbors, verified=None, exclude_docum
     )
     return scan_for_consensus_contradiction(
         text, exclude_document_id=exclude_document_id, embed_fn=embed,
+        exclude_sha256=exclude_sha256,
         query_fn=lambda query_embedding=None, top_k=5: neighbors,
     )
 
@@ -126,6 +134,33 @@ def test_quarantined_neighbor_is_ignored(monkeypatch):
         "Passwords are no longer required for every employee workstation.",
         neighbors,
     )
+    assert result["decision"] == "clear"
+    assert result["evidence"] == []
+
+
+def test_identical_suspicious_duplicate_is_not_contradiction_evidence(monkeypatch):
+    neighbor = stub_query(
+        ["Passwords are required for all employee workstation access."],
+        statuses=["Suspicious"],
+    )(top_k=5)[0]
+    digest = neighbor["metadata"]["sha256"]
+    verified = {
+        neighbor["metadata"]["document_id"]: {
+            "document_id": neighbor["metadata"]["document_id"],
+            "trust_status": "Suspicious",
+            "integrity_ok": True,
+            "sha256": digest,
+        }
+    }
+
+    result = scan_with_sources(
+        monkeypatch,
+        "Passwords are no longer required for all employee workstation access.",
+        [neighbor],
+        verified=verified,
+        exclude_sha256=digest,
+    )
+
     assert result["decision"] == "clear"
     assert result["evidence"] == []
 

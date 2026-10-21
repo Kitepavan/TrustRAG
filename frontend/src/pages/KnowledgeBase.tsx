@@ -1,11 +1,12 @@
-import { useState } from 'react';
+import { useState, type FormEvent } from 'react';
 import { api } from '../services/api';
 import { useApi } from '../hooks/useApi';
 import PageHeader from '../components/PageHeader';
 import type { DocumentInfo } from '../types';
 
 export default function KnowledgeBase() {
-  const { data, loading, error } = useApi(() => api.getDocuments());
+  const { data, loading, error, refetch } = useApi(() => api.getDocuments());
+  const { data: currentUser } = useApi(() => api.getCurrentUser(), []);
   const [expandedDoc, setExpandedDoc] = useState<string | null>(null);
 
   return (
@@ -47,6 +48,8 @@ export default function KnowledgeBase() {
                 doc={doc}
                 expanded={expandedDoc === doc.document_id}
                 onToggle={() => setExpandedDoc(expandedDoc === doc.document_id ? null : (doc.document_id ?? null))}
+                canPromote={currentUser?.role === 'Admin'}
+                onPromoted={() => refetch({ silent: true })}
               />
             ))}
           </div>
@@ -63,7 +66,39 @@ export default function KnowledgeBase() {
   );
 }
 
-function DocumentRow({ doc, expanded, onToggle }: { doc: DocumentInfo; expanded: boolean; onToggle: () => void }) {
+function DocumentRow({
+  doc,
+  expanded,
+  onToggle,
+  canPromote,
+  onPromoted,
+}: {
+  doc: DocumentInfo;
+  expanded: boolean;
+  onToggle: () => void;
+  canPromote: boolean;
+  onPromoted: () => Promise<void>;
+}) {
+  const [promotionReason, setPromotionReason] = useState('');
+  const [promotionError, setPromotionError] = useState('');
+  const [promoting, setPromoting] = useState(false);
+
+  const promote = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!doc.document_id || promotionReason.trim().length < 10) return;
+    setPromotionError('');
+    setPromoting(true);
+    try {
+      await api.promoteSuspiciousDocument(doc.document_id, promotionReason.trim());
+      setPromotionReason('');
+      await onPromoted();
+    } catch (err) {
+      setPromotionError(err instanceof Error ? err.message : 'Trust promotion failed');
+    } finally {
+      setPromoting(false);
+    }
+  };
+
   return (
     <div>
       <div
@@ -122,6 +157,32 @@ function DocumentRow({ doc, expanded, onToggle }: { doc: DocumentInfo; expanded:
                 {doc.sha256}
               </p>
             </div>
+          )}
+          {canPromote && doc.trust_status === 'Suspicious' && (
+            <form onSubmit={promote} className="mt-4 max-w-2xl border-t border-outline-variant pt-4">
+              <label htmlFor={`promotion-reason-${doc.document_id}`} className="block text-[12px] leading-[16px] text-outline mb-1">
+                Admin review reason (at least 10 characters)
+              </label>
+              <div className="flex flex-wrap gap-2">
+                <input
+                  id={`promotion-reason-${doc.document_id}`}
+                  value={promotionReason}
+                  onChange={(event) => setPromotionReason(event.target.value)}
+                  minLength={10}
+                  required
+                  className="min-w-[260px] flex-1 bg-surface-container text-on-surface border border-outline-variant rounded px-3 py-2 text-[13px]"
+                  placeholder="Why is this source legitimate?"
+                />
+                <button
+                  type="submit"
+                  disabled={promoting || promotionReason.trim().length < 10}
+                  className="bg-secondary-container/30 border border-secondary/40 text-secondary hover:bg-secondary-container/50 rounded px-3 py-2 text-[12px] font-semibold disabled:opacity-50"
+                >
+                  {promoting ? 'Promoting…' : 'Promote to Trusted'}
+                </button>
+              </div>
+              {promotionError && <div role="alert" className="mt-2 text-[12px] text-error">{promotionError}</div>}
+            </form>
           )}
         </div>
       )}

@@ -102,7 +102,12 @@ export interface AuditEvent {
   event_type: string;
   severity: 'info' | 'warning' | 'error';
   request_id: string;
-  details: Record<string, unknown> & QueryTelemetry;
+  details: Record<string, unknown> & QueryTelemetry & {
+    document_id?: string;
+    trust_status?: string;
+    trust_reasons?: string[];
+    reason?: string;
+  };
 }
 
 export interface AuditResponse {

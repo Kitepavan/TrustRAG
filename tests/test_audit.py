@@ -1,9 +1,11 @@
 """Audit and query traces use isolated stores and never call an external LLM."""
 
 import json
+from io import BytesIO
 
 import pytest
 from fastapi.testclient import TestClient
+from starlette.datastructures import UploadFile
 
 from backend.main import app
 from backend.api import query
@@ -102,10 +104,49 @@ def test_upload_persists_audit_event(monkeypatch):
         events = client.get("/audit/events?event_type=UPLOAD_COMPLETED", headers=headers()).json()["events"]
         assert len(events) == 1
         assert events[0]["details"]["document_id"] == body["document_id"]
+        assert events[0]["details"]["trust_reasons"] == ["UNSIGNED_DOCUMENT_FLAGGED_SUSPICIOUS"]
         assert "The office" not in json.dumps(events)
         rejected = client.post("/documents/upload", headers=headers(), files={"file": ("bad.exe", b"data")})
         assert rejected.status_code == 400
         assert audit.list_events(event_type="UPLOAD_REJECTED")["events"]
+
+
+def test_quarantined_upload_audit_contains_trust_reasons(monkeypatch):
+    from backend.api import documents
+
+    reasons = ["PROMPT_INJECTION_DETECTED"]
+    monkeypatch.setattr(documents, "check_rbac_permission", lambda *_: True)
+    monkeypatch.setattr(documents, "embed_chunks", lambda chunks: [])
+    monkeypatch.setattr(documents, "add_chunks", lambda chunks: 0)
+    monkeypatch.setattr(documents, "ingest_document", lambda **_: {
+        "status": "processed",
+        "document_id": "DOC-TEST-QUARANTINED",
+        "filename": "policy.txt",
+        "sha256": "test-digest",
+        "is_signed": True,
+        "signature_valid": True,
+        "trust_status": "Quarantined",
+        "access_level": "INTERNAL",
+        "uploaded_by": "admin",
+        "uploaded_at": "2026-10-20T00:00:00+00:00",
+        "total_pages": 1,
+        "total_chars": 10,
+        "total_chunks": 0,
+        "chunks": [],
+        "reasons": reasons,
+    })
+
+    documents.upload_document(
+        file=UploadFile(filename="policy.txt", file=BytesIO(b"document")),
+        access_level="INTERNAL",
+        signature_b64="signature-is-not-logged",
+        user={"username": "admin", "clearance_tags": []},
+    )
+
+    event = audit.list_events(event_type="UPLOAD_QUARANTINED")["events"][0]
+    assert event["details"]["trust_reasons"] == reasons
+    assert event["details"]["document_id"] == "DOC-TEST-QUARANTINED"
+    assert "signature-is-not-logged" not in json.dumps(event)
 
 
 def test_audit_failure_does_not_raise(tmp_path, monkeypatch):

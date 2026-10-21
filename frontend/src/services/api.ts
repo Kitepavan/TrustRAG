@@ -61,6 +61,15 @@ export const api = {
     `/documents/${encodeURIComponent(documentId)}`,
     { method: 'DELETE' },
   ),
+  promoteSuspiciousDocument: (documentId: string, reason: string) => request<{
+    document_id: string;
+    trust_status: 'Trusted';
+    promoted_by: string;
+  }>(`/documents/${encodeURIComponent(documentId)}/promote`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ reason }),
+  }),
   uploadDocument: async (
     file: File,
     accessLevel: string = 'INTERNAL',

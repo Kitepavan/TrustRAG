@@ -73,6 +73,7 @@ def scan_for_consensus_contradiction(
     embed_fn: Callable | None = None,
     query_fn: Callable | None = None,
     verified_cache: dict[str, dict | None] | None = None,
+    exclude_sha256: str | None = None,
 ) -> dict[str, Any]:
     """Return trust-weighted contradiction evidence from distinct verified documents."""
     claims = sorted(
@@ -146,6 +147,7 @@ def scan_for_consensus_contradiction(
             record = verified.get(document_id)
             chunk_text = neighbor.get("text", "")
             if (not record or not record.get("integrity_ok") or
+                    (exclude_sha256 and record.get("sha256") == exclude_sha256) or
                     metadata.get("sha256") != record.get("sha256")):
                 continue
             text_sha256 = text_digests.get(chunk_text)

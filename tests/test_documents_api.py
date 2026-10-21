@@ -187,3 +187,97 @@ def test_delete_document_requires_clearance_for_classification():
     assert error.value.status_code == 403
     assert (documents.UPLOAD_DIR / stored_name).exists()
     assert document_id in documents.get_metadata_store()
+
+
+def _seed_signed_document_for_promotion(document_id, trust_status):
+    import backend.api.documents as documents
+    from backend.security.hashing import compute_sha256_bytes
+
+    private_key, _ = ensure_enterprise_keys()
+    content = b"Verified document for admin trust promotion."
+    signature = sign_data(content, private_key)
+    stored_name = f"{document_id}.txt"
+    (documents.UPLOAD_DIR / stored_name).write_bytes(content)
+    documents.save_metadata_store({document_id: {
+        "document_id": document_id,
+        "filename": "verified.txt",
+        "stored_filename": stored_name,
+        "sha256": compute_sha256_bytes(content),
+        "is_signed": True,
+        "signature_b64": signature,
+        "signature_valid": True,
+        "trust_status": trust_status,
+        "access_level": "INTERNAL",
+    }})
+    return content, signature
+
+
+def test_admin_promotes_suspicious_document_to_trusted(monkeypatch, tmp_path):
+    import backend.api.documents as documents
+    from backend.rag import vectorstore
+    from backend.security import audit
+    from backend.security.provenance import ProvenanceRecord, provenance_tracker
+
+    document_id = "DOC-PROMOTE-TEST"
+    content, signature = _seed_signed_document_for_promotion(document_id, "Suspicious")
+    from backend.security.hashing import compute_sha256_bytes
+    digest = compute_sha256_bytes(content)
+    provenance_tracker.record_provenance(ProvenanceRecord(
+        document_id=document_id, filename="verified.txt", sha256_hash=digest,
+        signature_valid=True, trust_status="Suspicious",
+    ))
+    vectorstore.add_chunks([{
+        "chunk_id": "promote-test-chunk", "text": content.decode(), "embedding": [0.2, 0.8],
+        "document_id": document_id, "sha256": digest, "signature_valid": True,
+        "trust_status": "Suspicious", "access_level": "INTERNAL",
+    }])
+    monkeypatch.setattr(audit, "AUDIT_DB", tmp_path / "audit.sqlite3")
+
+    result = documents.promote_suspicious_document(
+        document_id,
+        documents.TrustPromotionRequest(reason="Verified with the official source."),
+        user={"username": "admin", "role": "Admin", "clearance_tags": ["PUBLIC", "INTERNAL"]},
+    )
+
+    assert result["trust_status"] == "Trusted"
+    assert documents.get_metadata_store()[document_id]["trust_status"] == "Trusted"
+    assert vectorstore.get_collection().get(where={"document_id": document_id})["metadatas"][0]["trust_status"] == "Trusted"
+    assert provenance_tracker.get_provenance(document_id).trust_status == "Trusted"
+    event = audit.list_events(event_type="ADMIN_TRUST_PROMOTION")["events"][0]
+    assert event["details"]["document_id"] == document_id
+    assert event["details"]["reason"] == "Verified with the official source."
+    assert signature not in str(event["details"])
+
+
+def test_admin_cannot_promote_quarantined_document(monkeypatch):
+    import pytest
+    import backend.api.documents as documents
+    from fastapi import HTTPException
+
+    document_id = "DOC-QUARANTINE-IMMUTABLE"
+    _seed_signed_document_for_promotion(document_id, "Quarantined")
+
+    with pytest.raises(HTTPException) as error:
+        documents.promote_suspicious_document(
+            document_id,
+            documents.TrustPromotionRequest(reason="Reviewed by an administrator."),
+            user={"username": "admin", "role": "Admin"},
+        )
+
+    assert error.value.status_code == 400
+    assert documents.get_metadata_store()[document_id]["trust_status"] == "Quarantined"
+
+
+def test_only_admin_can_promote_suspicious_document():
+    import pytest
+    import backend.api.documents as documents
+    from fastapi import HTTPException
+
+    with pytest.raises(HTTPException) as error:
+        documents.promote_suspicious_document(
+            "DOC-NOT-REACHED",
+            documents.TrustPromotionRequest(reason="Reviewed by an administrator."),
+            user={"username": "emp_user", "role": "Employee"},
+        )
+
+    assert error.value.status_code == 403

@@ -163,6 +163,18 @@ def test_long_text_is_segmented_and_any_positive_segment_blocks(monkeypatch):
     assert all(len(call["questions"]) <= detector.MAX_QUESTIONS_PER_REQUEST for call in calls)
 
 
+def test_segments_fit_local_classifier_budget_and_keep_overlap():
+    text = "supplier policy text " * 200
+    segments = detector._segments(text)
+
+    assert len(segments) > 1
+    assert all(len(segment) <= detector.SEGMENT_CHARS for segment in segments)
+    assert all(
+        current[:detector.SEGMENT_OVERLAP] == previous[-detector.SEGMENT_OVERLAP:]
+        for previous, current in zip(segments, segments[1:])
+    )
+
+
 def test_any_segment_provider_failure_keeps_whole_document_unavailable(monkeypatch):
     calls = 0
 

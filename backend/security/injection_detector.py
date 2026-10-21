@@ -20,11 +20,10 @@ DEFAULT_DECISION_URL = "https://openrouter.ai/api/v1/systemone"
 # in docs/evaluations/2026-10-17-laya-local-classifier-calibration.md). Provisional:
 # recalibrate as the labeled corpus grows; do not tune on held-out results.
 INJECTION_THRESHOLD = 0.35324999999999995
-# Each segment must fit inside the served classifier's token window: a 2000-char
-# English segment measures ~360 state tokens and is not truncated, and a provider
-# that reports truncation anyway makes the scan fail closed.
-SEGMENT_CHARS = 2000
-SEGMENT_OVERLAP = 256
+# Real supplier PDFs produced truncated Laya states at 2000 chars; 1000-char
+# segments stay within its measured state budget while retaining boundary context.
+SEGMENT_CHARS = 1000
+SEGMENT_OVERLAP = 128
 # The local Laya classifier answered item-by-item correctly only when the state held a
 # single text (measured October 17, 2026); multi-item states produced answers that
 # ignored the referenced key. Local requests are cheap, so segments are sent alone.

@@ -1,0 +1,122 @@
+{
+  "base": "http://localhost:5173",
+  "viewport": "1440x1024",
+  "checks": [
+    {
+      "check": "sign-in gate shown for anonymous visitor",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "demo-mode 1-click personas gated by /auth/demo-status",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "Employee quick-login reaches authenticated shell",
+      "ok": true,
+      "detail": "http://localhost:5173/"
+    },
+    {
+      "check": "no horizontal overflow at 1440x1024",
+      "ok": true,
+      "detail": "{\"viewport\": [1440, 1024], \"sidebarVisible\": true, \"sidebarWidth\": 232, \"headerHeight\": 58, \"bodyScrollWidth\": 1440, \"horizontalOverflow\": false, \"metricPositions\": 0}"
+    },
+    {
+      "check": "desktop sidebar rendered (>=150px)",
+      "ok": true,
+      "detail": "232px"
+    },
+    {
+      "check": "chat header shows configured provider",
+      "ok": true,
+      "detail": "Z.ai \u00b7 glm-5-turbo"
+    },
+    {
+      "check": "live answer rendered",
+      "ok": true,
+      "detail": "941 chars in 40.7s"
+    },
+    {
+      "check": "no degraded fallback notice in answer",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "classifier cleared the benign query (trace)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "answer cites retrieved sources",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "injection query blocked with security trace",
+      "ok": true,
+      "detail": "1.4s"
+    },
+    {
+      "check": "no browser console errors after sign-in",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "no failed network requests",
+      "ok": true,
+      "detail": ""
+    }
+  ],
+  "console_errors": [
+    {
+      "phase": "pre-login",
+      "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+    },
+    {
+      "phase": "pre-login",
+      "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+    }
+  ],
+  "failed_requests": [],
+  "dashboard_layout": {
+    "viewport": [
+      1440,
+      1024
+    ],
+    "sidebarVisible": true,
+    "sidebarWidth": 232,
+    "headerHeight": 58,
+    "bodyScrollWidth": 1440,
+    "horizontalOverflow": false,
+    "metricPositions": 0
+  },
+  "provider_chip": "Z.ai \u00b7 glm-5-turbo",
+  "benign": {
+    "question": "What are the requirements for ingredient suppliers?",
+    "elapsed_s": 40.7,
+    "answer": "Based on the provided context, the requirements for ingredient suppliers include:\n\n*   **Sustainable Agriculture (PSA):** Suppliers of ingredients of agricultural origins must meet additional requirements to ensure adherence to the company\u2019s Principles for Sustainable Agriculture (PSA). Suppliers of \"all other agricultural ingredients\" must establish continuous improvement towards meeting the PSA.\n*   **Certification:** Suppliers of Level 1 ingredients must obtain certification. TCCC has approved a limited set of global third-party standards that align with the expectations of the PSA.\n*   **Sampling:** Ensure that the sample represents the batch/blend or lot intended to be shipped to TCCC.\n*   **Certificate of Analysis:** Provide a certificate of analysis with each sample.\n*   **Traceability:** Implement an effective traceability program and be able to trace 100% of stock within 24 hours where required by TCCC or the customer.",
+    "trace": "shield\nSECURITY TRACE\n\u00b7 39110.34ms\ncheck_circleauthentication \u2014 Authenticated as Employee in secure mode.\ncheck_circleprompt_security \u2014 Injection classifier cleared this query (risk score: 0.014).\ncheck_circleembedding \u2014 Query embedding generated.\ncheck_circleretrieval (9) \u2014 Retrieved similarity candidates.\ncheck_circleintegrity (0) \u2014 Candidates excluded by file/signature or indexed-text integrity verification.\ncheck_circleBLOCKED_QUARANTINED (0) \u2014 Quarantined or invalid trust metadata.\ncheck_circleBLOCKED_UNAUTHORIZED_RBAC (0) \u2014 Excluded by role-based access control.\ncheck_circleBLOCKED_RETRIEVAL_PROMPT_INJECTION (0) \u2014 Prompt injection detected during content rescan.\ncheck_circleBLOCKED_RETRIEVAL_INJECTION_CHECK_UNAVAILABLE (0) \u2014 Prompt-injection check could not complete.\ncheck_circleBLOCKED_RETRIEVAL_POISONING (0) \u2014 Knowledge poisoning detected during content rescan.\ncheck_circleBLOCKED_RETRIEVAL_CONTRADICTION (0) \u2014 Trusted-neighbor quorum contradiction detected.\ncheck_circleBLOCKED_RETRIEVAL_NEIGHBOR_UNAVAILABLE (0) \u2014 Neighbor security check could not complete.\nwarningREVIEW_RETRIEVAL_CONTRADICTION (3) \u2014 Mixed or insufficient neighbor evidence; candidate is treated as Suspicious.\ncheck_circleRETRIEVAL_NEIGHBOR_CHECK (6) \u2014 Neighbor security check completed without a contradiction.\ncheck_circlecontext (3) \u2014 Selected context after trust ranking and top-K limit.\ncheck_circlegeneration \u2014 Answer service returned a response; it may include a labelled fallback if the provider was unavailable."
+  },
+  "injection": {
+    "elapsed_s": 1.4,
+    "trace": "shield\nSECURITY TRACE\n\u00b7 1238.46ms\ncheck_circleauthentication \u2014 Authenticated as Employee in secure mode.\nblockprompt_security \u2014 Injection classifier flagged this query as prompt injection (risk score: 1.000); retrieval and generation stopped."
+  },
+  "pre_login_401s": [
+    {
+      "phase": "pre-login",
+      "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+    },
+    {
+      "phase": "pre-login",
+      "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+    }
+  ],
+  "screenshots": {
+    "dashboard": "02-dashboard-1440x1024.png",
+    "chat_answer": "03-chat-secure-answer-1440x1024.png",
+    "injection_blocked": "04-chat-injection-blocked-1440x1024.png"
+  },
+  "passed": 13,
+  "total": 13
+}

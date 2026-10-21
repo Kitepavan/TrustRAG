@@ -143,6 +143,7 @@ def upload_document(
                      "UPLOAD_QUARANTINED" if result["trust_status"] == "Quarantined" else "UPLOAD_COMPLETED",
                      "warning" if result["trust_status"] != "Trusted" else "info",
                      document_id=result["document_id"], trust_status=result["trust_status"],
+                     trust_reasons=result.get("reasons", []),
                      access_level=result["access_level"], chunk_count=stored)
         return {
             "document_id": result["document_id"],
@@ -245,27 +246,19 @@ def delete_document(
     return {"document_id": document_id, "deleted": True}
 
 
-class OverrideRequest(BaseModel):
-    trust_status: str
+class TrustPromotionRequest(BaseModel):
     reason: str
 
 
-@router.post("/{document_id}/override")
-def override_quarantine(
+@router.post("/{document_id}/promote")
+def promote_suspicious_document(
     document_id: str,
-    body: OverrideRequest,
+    body: TrustPromotionRequest,
     user: Dict[str, Any] = Depends(get_current_user_required),
 ):
-    """Admin break-glass: release a Quarantined document to Trusted/Suspicious.
-
-    Quarantine is default-deny; only Admin may override, and the override is
-    audited. Integrity failures cannot be overridden — they re-quarantine.
-    """
+    """Allow an Admin to promote an integrity-verified Suspicious document."""
     if user.get("role") != "Admin":
-        raise HTTPException(status_code=403, detail="Quarantine override requires Admin clearance")
-    trust_status = (body.trust_status or "").strip()
-    if trust_status not in {"Trusted", "Suspicious"}:
-        raise HTTPException(status_code=400, detail="trust_status must be Trusted or Suspicious")
+        raise HTTPException(status_code=403, detail="Trust promotion requires Admin clearance")
     if len((body.reason or "").strip()) < 10:
         raise HTTPException(status_code=400, detail="A reason of at least 10 characters is required")
 
@@ -274,8 +267,10 @@ def override_quarantine(
         meta = metadata.get(document_id)
         if meta is None:
             raise HTTPException(status_code=404, detail=f"Document {document_id} not found")
-        if meta.get("trust_status") != "Quarantined":
-            raise HTTPException(status_code=400, detail="Only Quarantined documents can be overridden")
+        if meta.get("trust_status") != "Suspicious":
+            raise HTTPException(status_code=400, detail="Only Suspicious documents can be promoted; Quarantined documents cannot")
+        if not check_rbac_permission(user.get("clearance_tags", []), meta.get("access_level")):
+            raise HTTPException(status_code=403, detail="Document clearance does not permit trust promotion")
     # Integrity check runs outside the write lock: verified_documents takes the
     # same file lock, and flock exclusive locks do not re-enter (deadlock).
     info = _doc_info_with_integrity(meta)
@@ -285,24 +280,24 @@ def override_quarantine(
     with document_store.store_lock(document_store.METADATA_FILE):
         metadata = get_metadata_store()
         meta = metadata.get(document_id)
-        if meta is None or meta.get("trust_status") != "Quarantined":
-            raise HTTPException(status_code=409, detail="Document state changed; retry the override")
-        meta["trust_status"] = trust_status
-        meta["override_by"] = user["username"]
-        meta["override_reason"] = body.reason.strip()
+        if meta is None or meta.get("trust_status") != "Suspicious":
+            raise HTTPException(status_code=409, detail="Document state changed; retry the promotion")
+        meta["trust_status"] = "Trusted"
+        meta["promoted_by"] = user["username"]
+        meta["promotion_reason"] = body.reason.strip()
         save_metadata_store(metadata)
 
     from backend.rag.vectorstore import unquarantine_document
     from backend.security.provenance import provenance_tracker
     try:
-        unquarantine_document(document_id, trust_status)
+        unquarantine_document(document_id, "Trusted")
     except Exception:
-        logger.exception("Admin override left Chroma status stale; metadata remains authoritative")
+        logger.exception("Admin promotion left Chroma status stale; metadata remains authoritative")
     record = provenance_tracker.get_provenance(document_id)
     if record is not None:
-        record.trust_status = trust_status
-        record.notes = f"ADMIN_OVERRIDE by {user['username']}: {body.reason.strip()}"
+        record.trust_status = "Trusted"
+        record.notes = f"ADMIN_TRUST_PROMOTION by {user['username']}: {body.reason.strip()}"
         provenance_tracker.record_provenance(record)
-    record_event(user["username"], "ADMIN_OVERRIDE", "warning",
-                 document_id=document_id, trust_status=trust_status, reason=body.reason.strip())
-    return {"document_id": document_id, "trust_status": trust_status, "override_by": user["username"]}
+    record_event(user["username"], "ADMIN_TRUST_PROMOTION", "warning",
+                 document_id=document_id, trust_status="Trusted", reason=body.reason.strip())
+    return {"document_id": document_id, "trust_status": "Trusted", "promoted_by": user["username"]}

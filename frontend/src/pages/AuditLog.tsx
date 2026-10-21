@@ -4,7 +4,20 @@ import { useApi } from '../hooks/useApi';
 import PageHeader from '../components/PageHeader';
 import type { AuditEvent, PipelineStep } from '../types';
 
-const EVENT_TYPES = ['', 'QUERY_COMPLETED', 'QUERY_NO_CONTEXT', 'QUERY_FAILED', 'BASELINE_MODE_USED', 'BASELINE_ACCESS_DENIED', 'UPLOAD_COMPLETED', 'UPLOAD_QUARANTINED', 'UPLOAD_REJECTED', 'UPLOAD_FAILED'];
+const EVENT_TYPES = ['', 'QUERY_COMPLETED', 'QUERY_NO_CONTEXT', 'QUERY_FAILED', 'BASELINE_MODE_USED', 'BASELINE_ACCESS_DENIED', 'UPLOAD_COMPLETED', 'UPLOAD_QUARANTINED', 'UPLOAD_REJECTED', 'UPLOAD_FAILED', 'ADMIN_TRUST_PROMOTION'];
+const TRUST_REASON_LABELS: Record<string, string> = {
+  UNSIGNED_DOCUMENT_FLAGGED_SUSPICIOUS: 'No valid enterprise signature was supplied.',
+  FAILED_DIGITAL_SIGNATURE_VERIFICATION: 'Signature verification failed; the file or signature may have changed.',
+  PROMPT_INJECTION_SCAN_UNAVAILABLE: 'The prompt-injection scan could not complete, so the document was blocked by fail-closed policy.',
+  PROMPT_INJECTION_DETECTED: 'The content was flagged as possible instructions aimed at an AI system.',
+  KNOWLEDGE_POISONING_DETECTED: 'The content matched a knowledge-poisoning rule.',
+  NEIGHBOR_CONTRADICTION_REQUIRES_REVIEW: 'The content conflicts with similar documents and needs review.',
+  INSUFFICIENT_TRUSTED_QUORUM: 'There was not enough trusted-source agreement to confirm the conflict.',
+  CONFLICTING_TRUSTED_NEIGHBORS: 'Trusted documents disagree about similar content.',
+  TRUSTED_NEIGHBOR_QUORUM_CONTRADICTION: 'The content conflicts with multiple verified trusted documents.',
+  NEIGHBOR_CHECK_UNAVAILABLE: 'The comparison with similar documents could not complete.',
+  VALID_DIGITAL_SIGNATURE_AND_CLEAN_CONTENT: 'The signature is valid and security scans found no issue.',
+};
 
 function severityClasses(severity: AuditEvent['severity']): string {
   if (severity === 'error') return 'text-error border-error/40 bg-error-container/20';
@@ -29,7 +42,17 @@ function formatDetails(event: AuditEvent): string {
   const summary = event.details.pipeline_log
     ?.map((step) => `${step.status === 'blocked' || step.status === 'error' ? '✗' : '✓'} ${step.stage}${step.count ? ` (${step.count})` : ''}`)
     .join('  ');
-  return summary ?? '';
+  if (summary) return summary;
+  if (Array.isArray(event.details.trust_reasons) && event.details.trust_reasons.length) {
+    return `${event.details.trust_status ?? 'Document trust decision'} — ${event.details.trust_reasons.length} reason(s)`;
+  }
+  return typeof event.details.reason === 'string' ? `${event.event_type} — ${event.details.reason}` : '';
+}
+
+function describeTrustReason(reason: string): string {
+  const [code, detail] = reason.split(':', 2);
+  const label = TRUST_REASON_LABELS[code] ?? code.replace(/_/g, ' ').toLowerCase();
+  return detail ? `${label} (${detail.replace(/_/g, ' ').toLowerCase()})` : label;
 }
 
 export default function AuditLog() {
@@ -154,9 +177,26 @@ export default function AuditLog() {
                     {formatDetails(event) ? (
                       <details>
                         <summary className="cursor-pointer text-[12px] text-on-surface-variant hover:text-on-surface">
-                          View pipeline trace
+                          {Array.isArray(event.details.trust_reasons) ? 'View trust decision' : 'View pipeline trace'}
                         </summary>
                         <div className="mt-2 space-y-1 font-mono text-[11px]">
+                          {Array.isArray(event.details.trust_reasons) && event.details.trust_reasons.length > 0 && (
+                            <div>
+                              <div className="text-on-surface-variant font-semibold">
+                                {event.details.trust_status ?? 'Document'} reasons:
+                              </div>
+                              <ul className="list-disc pl-5 space-y-1 text-on-surface">
+                                {event.details.trust_reasons.map((reason, i) => (
+                                  <li key={i}>{describeTrustReason(reason)}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                          {typeof event.details.reason === 'string' && (
+                            <div className="text-on-surface">
+                              <span className="text-on-surface-variant">Admin review reason:</span> {event.details.reason}
+                            </div>
+                          )}
                           {event.details.pipeline_log?.map((step, i) => (
                             <div key={i} className={stageClasses(step.status)}>
                               <span className="material-symbols-outlined text-[12px] align-[-2px] mr-1" aria-hidden="true">{stageIcon(step.status)}</span>

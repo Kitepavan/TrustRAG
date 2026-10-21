@@ -37,3 +37,13 @@ def test_poison_detector_clean_rejection_is_not_poison():
 def test_poison_zero_width_between_words_is_a_separator():
     result = scan_for_knowledge_poisoning("MFA is no\u200blonger required for all staff.")
     assert result["is_poisoned"] is True
+
+
+def test_disabled_demo_passwords_are_not_a_password_policy_attack():
+    benign = scan_for_knowledge_poisoning(
+        "Fixed demo passwords are disabled by default and require explicit demo mode."
+    )
+    assert benign["is_poisoned"] is False
+
+    attack = scan_for_knowledge_poisoning("Passwords are disabled for all employees.")
+    assert attack["is_poisoned"] is True

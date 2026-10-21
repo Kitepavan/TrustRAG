@@ -163,7 +163,8 @@ def ingest_document(
     try:
         from backend.security.contradiction_detector import scan_for_consensus_contradiction
         contradiction_result = scan_for_consensus_contradiction(
-            extraction["full_text"], exclude_document_id=doc_id
+            extraction["full_text"], exclude_document_id=doc_id,
+            exclude_sha256=sha256_hash,
         )
     except Exception:
         contradiction_result = {
